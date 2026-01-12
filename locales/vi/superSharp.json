@@ -1,0 +1,16 @@
+{
+  "superSharp_mainTitle": "Chạy Nét Ảnh",
+  "superSharp_subtitle": "Nâng cấp chất lượng và độ rõ nét cho hình ảnh bằng AI",
+  "superSharp_uploaderCaption": "Chọn thư mục hoặc nhiều ảnh",
+  "superSharp_uploaderDescription": "Tải lên các ảnh bị mờ, nhiễu hoặc độ phân giải thấp để làm nét hàng loạt",
+  "superSharp_optionsTitle": "Tùy chỉnh sắc nét",
+  "superSharp_upscaleLabel": "Mức độ nâng cấp",
+  "superSharp_denoiseLabel": "Khử nhiễu",
+  "superSharp_notesPlaceholder": "Ví dụ: làm rõ các sợi tóc, tăng cường chi tiết vải...",
+  "superSharp_createButton": "Làm nét ngay",
+  "superSharp_resultCaption": "Kết quả siêu nét",
+  "superSharp_regenDescription": "Thêm yêu cầu để cải thiện độ sắc nét",
+  "superSharp_regenPlaceholder": "Ví dụ: tăng độ tương phản chi tiết, khử nhiễu mạnh hơn...",
+  "superSharp_batchTitle": "Xử lý hàng loạt",
+  "superSharp_processingStatus": "Đang xử lý ảnh {0}/{1}..."
+}

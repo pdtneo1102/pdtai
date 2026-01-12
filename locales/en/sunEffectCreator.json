@@ -1,0 +1,28 @@
+
+{
+  "sunEffectCreator_mainTitle": "Sun Effect Creator",
+  "sunEffectCreator_subtitle": "Add brilliant and artistic sun effects to fashion photos",
+  "sunEffectCreator_uploaderCaption": "Upload Fashion Photo",
+  "sunEffectCreator_uploaderDescription": "Click to upload a portrait or fashion photo to add sun effects",
+  "sunEffectCreator_optionsTitle": "Sun Effect Options",
+  "sunEffectCreator_effectLabel": "Effect Type",
+  "sunEffectCreator_intensityLabel": "Intensity",
+  "sunEffectCreator_positionLabel": "Sun Position",
+  "sunEffectCreator_notesPlaceholder": "e.g., sun rays through leaves, harsher sunlight...",
+  "sunEffectCreator_createButton": "Add Sun Now",
+  "sunEffectCreator_resultCaption": "Sunlit Result",
+  "sunEffectCreator_regenDescription": "Add requests to adjust the lighting",
+  "sunEffectCreator_regenPlaceholder": "e.g., warmer sun, reduce glare...",
+  "sunEffectCreator_effectOptions": [
+    "Golden Hour",
+    "Sun Rays / God Rays",
+    "Artistic Lens Flare",
+    "Soft Morning Light",
+    "Window Shadows",
+    "Soft Dreamy Glow"
+  ],
+  "sunEffectCreator_intensityOptions": ["Very Subtle", "Subtle", "Standard", "Strong", "Dramatic"],
+  "sunEffectCreator_positionOptions": ["Auto", "Top Left", "Top Right", "Frontal", "Backlit"],
+  "app_sun-effect-creator_title": "Sun Effect Creator",
+  "app_sun-effect-creator_description": "Add brilliant and artistic sun effects to fashion photos with AI."
+}

@@ -1,0 +1,28 @@
+
+{
+  "sunEffectCreator_mainTitle": "Hiệu Ứng Nắng Đẹp",
+  "sunEffectCreator_subtitle": "Thêm ánh nắng rực rỡ và nghệ thuật cho ảnh thời trang",
+  "sunEffectCreator_uploaderCaption": "Tải ảnh thời trang",
+  "sunEffectCreator_uploaderDescription": "Nhấn để tải lên ảnh chân dung hoặc thời trang muốn thêm hiệu ứng nắng",
+  "sunEffectCreator_optionsTitle": "Tùy chỉnh hiệu ứng nắng",
+  "sunEffectCreator_effectLabel": "Kiểu nắng",
+  "sunEffectCreator_intensityLabel": "Cường độ nắng",
+  "sunEffectCreator_positionLabel": "Vị trí mặt trời",
+  "sunEffectCreator_notesPlaceholder": "Ví dụ: tia nắng chiếu qua kẽ lá, nắng gắt hơn...",
+  "sunEffectCreator_createButton": "Thêm nắng ngay",
+  "sunEffectCreator_resultCaption": "Ảnh đã thêm nắng",
+  "sunEffectCreator_regenDescription": "Thêm yêu cầu để điều chỉnh ánh sáng",
+  "sunEffectCreator_regenPlaceholder": "Ví dụ: làm nắng ấm hơn, giảm độ chói...",
+  "sunEffectCreator_effectOptions": [
+    "Nắng hoàng hôn (Golden Hour)",
+    "Tia nắng chiếu qua (Sun Rays/God Rays)",
+    "Lóa kính nghệ thuật (Lens Flare)",
+    "Nắng ban mai dịu nhẹ (Morning Light)",
+    "Nắng chiếu qua cửa sổ (Window Shadows)",
+    "Ánh sáng bồng bềnh (Soft Dreamy Glow)"
+  ],
+  "sunEffectCreator_intensityOptions": ["Rất nhẹ", "Nhẹ", "Vừa phải", "Mạnh", "Kịch tính"],
+  "sunEffectCreator_positionOptions": ["Tự động", "Góc trên trái", "Góc trên phải", "Chính diện", "Phía sau chủ thể (Backlit)"],
+  "app_sun-effect-creator_title": "Tạo Hiệu Ứng Nắng",
+  "app_sun-effect-creator_description": "Thêm ánh nắng rực rỡ và nghệ thuật cho ảnh thời trang bằng AI."
+}

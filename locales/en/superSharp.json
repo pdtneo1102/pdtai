@@ -1,0 +1,16 @@
+{
+  "superSharp_mainTitle": "Sharpen Image",
+  "superSharp_subtitle": "Enhance quality and clarity of your images with AI",
+  "superSharp_uploaderCaption": "Select Folder or Images",
+  "superSharp_uploaderDescription": "Upload blurry, noisy, or low-res photos for batch sharpening",
+  "superSharp_optionsTitle": "Sharpness Options",
+  "superSharp_upscaleLabel": "Upscale Level",
+  "superSharp_denoiseLabel": "Denoising",
+  "superSharp_notesPlaceholder": "e.g., clarify hair strands, enhance fabric details...",
+  "superSharp_createButton": "Sharpen Now",
+  "superSharp_resultCaption": "Enhanced Result",
+  "superSharp_regenDescription": "Add requests to improve sharpness",
+  "superSharp_regenPlaceholder": "e.g., increase detail contrast, stronger denoising...",
+  "superSharp_batchTitle": "Batch Processing",
+  "superSharp_processingStatus": "Processing image {0}/{1}..."
+}
