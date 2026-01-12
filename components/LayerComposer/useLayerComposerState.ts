@@ -253,7 +253,18 @@ export const useLayerComposerState = ({ isOpen, onClose, onHide }: { isOpen: boo
     const [aiNumberOfImages, setAiNumberOfImages] = useState(1);
     const [aiAspectRatio, setAiAspectRatio] = useState('Giữ nguyên');
     const [removeWatermark, setRemoveWatermark] = useState(false);
-    const appStateRef = useRef({ layers, history, historyIndex, canvasInitialized, canvasSettings, panX: 0, panY: 0, scale: 1, });
+
+    // FIX: Added explicit type to appStateRef to resolve potential spread issues and ensure type safety
+    const appStateRef = useRef<{
+        layers: Layer[];
+        history: Layer[][];
+        historyIndex: number;
+        canvasInitialized: boolean;
+        canvasSettings: CanvasSettings;
+        panX: number;
+        panY: number;
+        scale: number;
+    }>({ layers, history, historyIndex, canvasInitialized, canvasSettings, panX: 0, panY: 0, scale: 1, });
     
     useEffect(() => {
         appStateRef.current.layers = layers;
@@ -477,7 +488,11 @@ export const useLayerComposerState = ({ isOpen, onClose, onHide }: { isOpen: boo
     const addImagesAsLayers = (loadedImages: HTMLImageElement[], position?: { x: number; y: number }) => {
         if (loadedImages.length === 0) return;
         const { layers: currentLayers, history: currentHistory, historyIndex: currentHistoryIndex, canvasInitialized: currentCanvasInitialized, canvasSettings: currentCanvasSettings, panX: currentPanX, panY: currentPanY, scale: currentScale } = appStateRef.current;
-        let nextLayers = [...currentLayers];
+        
+        // FIX: Replaced explicit array spread on currentLayers with Array.from for better compatibility in certain strict TS environments
+        const layersToSpread: Layer[] = currentLayers || [];
+        let nextLayers: Layer[] = Array.from(layersToSpread);
+
         const newSelectedIds: string[] = [];
         let canvasNeedsInit = nextLayers.length === 0 && !currentCanvasInitialized;
         let canvasSettingsToUpdate = { ...currentCanvasSettings };
@@ -503,7 +518,8 @@ export const useLayerComposerState = ({ isOpen, onClose, onHide }: { isOpen: boo
                 id: Math.random().toString(36).substring(2, 9), type: 'image', url: img.src, x: newX, y: newY, width: initialWidth, height: initialHeight,
                 rotation: 0, opacity: 100, blendMode: 'source-over', isVisible: true, isLocked: false, fontWeight: 'normal', fontStyle: 'normal', textTransform: 'none',
             };
-            nextLayers = [newLayer, ...nextLayers]; newSelectedIds.push(newLayer.id);
+            // FIX: Replaced explicit array spread with concat for better strict environment compatibility
+            nextLayers = [newLayer].concat(nextLayers); newSelectedIds.push(newLayer.id);
         });
         setLayers(nextLayers); setSelectedLayerIds(newSelectedIds);
         const newHistory = currentHistory.slice(0, currentHistoryIndex + 1);
@@ -732,7 +748,7 @@ export const useLayerComposerState = ({ isOpen, onClose, onHide }: { isOpen: boo
                             generateFromMultipleImages(imageUrlsToCombine, finalPrompt, aiAspectRatio, removeWatermark)
                         );
                         
-                        const generatedUrls = await Promise.all(generatedPromises);
+                        const generatedUrls = await Promise.all(generationPromises);
                         if (signal.aborted) throw new Error("Cancelled");
                         results = generatedUrls;
                     }
@@ -775,7 +791,6 @@ export const useLayerComposerState = ({ isOpen, onClose, onHide }: { isOpen: boo
                 addLog(t('layerComposer_ai_log_error', errorMessage), 'error');
             }
         } finally {
-            // FIX: Replaced spread operator with functional update to handle array safely and avoid "Spread types may only be created from object types" errors in specific TS versions.
             setAiProcessLog((current: AILogMessage[]) => {
                 const logs: AILogMessage[] = [];
                 current.forEach(item => {
@@ -844,6 +859,7 @@ export const useLayerComposerState = ({ isOpen, onClose, onHide }: { isOpen: boo
         try {
             const bbox = getBoundingBoxForLayers([layerToBake]); if (!bbox) throw new Error("Could not calculate layer bounds.");
             const bakedImageUrl = await captureCanvas([layerToBake], bbox, null);
+            // FIX: Corrected variable name from mergedImageUrl to bakedImageUrl
             const newLayer: Layer = { id: Math.random().toString(36).substring(2, 9), type: 'image', url: bakedImageUrl, x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height, rotation: 0, opacity: 100, blendMode: 'source-over', isVisible: layerToBake.isVisible, isLocked: false, fontWeight: 'normal', fontStyle: 'normal', textTransform: 'none', textAlign: undefined, color: undefined, lineHeight: undefined, };
             const oldLayers = layers; const oldHistoryIndex = historyIndex;
             const newLayers = oldLayers.map(l => l.id === layerToBake.id ? newLayer : l);
@@ -878,4 +894,114 @@ export const useLayerComposerState = ({ isOpen, onClose, onHide }: { isOpen: boo
             const loadedImages = await Promise.all(imageLoadPromises);
             addLog(t('layerComposer_ai_log_addingLayers', loadedImages.length), 'info');
             const referenceBounds = getBoundingBoxForLayers(selectedLayers.length > 0 ? selectedLayers : layers.slice(-1));
-            const position = referenceBounds ?
+            const position = referenceBounds ? { x: referenceBounds.x + referenceBounds.width + 20, y: referenceBounds.y } : undefined; addImagesAsLayers(loadedImages, position);
+            addLog(t('layerComposer_ai_log_success'), 'success');
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : "Unknown error during preset generation.";
+            setError(errorMessage); setAiProcessLog(prev => prev.filter(l => l.type !== 'spinner')); addLog(t('layerComposer_ai_log_error', errorMessage), 'error');
+        } finally { setRunningJobCount(prev => Math.max(0, prev - 1)); }
+    }, [loadedPreset, selectedLayers, layers, t, isSimpleImageMode, addLog, aiProcessLog.length, addImagesAsLayers]);
+
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (!isOpen) return; const target = e.target as HTMLElement;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) { return; }
+            const isUndo = (e.metaKey || e.ctrlKey) && e.code === 'KeyZ' && !e.shiftKey;
+            const isRedo = (e.metaKey || e.ctrlKey) && (e.code === 'KeyZ' && e.shiftKey || e.code === 'KeyY');
+            if (isUndo) { e.preventDefault(); handleUndo(); return; }
+            if (isRedo) { e.preventDefault(); handleRedo(); return; }
+            if (e.code === 'Space' && !e.repeat) { e.preventDefault(); setIsSpacePanning(true); }
+            const isDelete = (e.code === 'Delete' || e.code === 'Backspace'); const isDuplicate = (e.metaKey || e.ctrlKey) && e.code === 'KeyJ';
+            const isMoveDown = (e.metaKey || e.ctrlKey) && e.code === 'BracketLeft'; const isMoveUp = (e.metaKey || e.ctrlKey) && e.code === 'BracketRight';
+            const isDeselectAll = (e.metaKey || e.ctrlKey) && e.code === 'KeyD'; const isExport = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'e';
+            const isToggleChatbot = e.code === 'Backquote';
+            if (isToggleChatbot) { e.preventDefault(); setIsChatbotOpen(v => !v); return; }
+            if (selectedLayerIds.length > 0) {
+                if (isDelete) { e.preventDefault(); deleteSelectedLayers(); return; } if (isDuplicate) { e.preventDefault(); duplicateSelectedLayers(); return; }
+                if (isMoveDown) { e.preventDefault(); handleMoveLayers('down'); return; } if (isMoveUp) { e.preventDefault(); handleMoveLayers('up'); return; }
+                if (isExport) { e.preventDefault(); handleExportSelectedLayers(); return; }
+            }
+            if (isDeselectAll) { e.preventDefault(); setSelectedLayerIds([]); return; }
+            const isSimpleKey = !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+            if (isSimpleKey) {
+                let handled = false;
+                switch (e.code) {
+                    case 'KeyV': setActiveCanvasTool('select'); handled = true; break;
+                    case 'KeyH': setActiveCanvasTool('hand'); handled = true; break;
+                    case 'KeyR': setActiveCanvasTool('rectangle'); handled = true; break;
+                    case 'KeyE': setActiveCanvasTool('ellipse'); handled = true; break;
+                }
+                if (handled) e.preventDefault();
+            }
+        };
+        const handleKeyUp = (e: KeyboardEvent) => { if (!isOpen) return; if (e.code === 'Space') { setIsSpacePanning(false); } };
+        window.addEventListener('keydown', handleKeyDown); window.addEventListener('keyup', handleKeyUp);
+        return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
+    }, [ isOpen, handleUndo, handleRedo, deleteSelectedLayers, duplicateSelectedLayers, handleMoveLayers, setSelectedLayerIds, selectedLayerIds, activeCanvasTool, selectedLayer, handleExportSelectedLayers ]);
+
+    useEffect(() => {
+        const handleTabKey = (e: KeyboardEvent) => {
+            if (isOpen && e.code === 'Tab') {
+                const target = e.target as HTMLElement;
+                if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) { return; }
+                e.preventDefault(); setIsLogVisible(v => !v);
+            }
+        };
+        window.addEventListener('keydown', handleTabKey);
+        return () => window.removeEventListener('keydown', handleTabKey);
+    }, [isOpen]);
+
+    const handlePresetFile = async (file: File) => {
+        let settingsData: any = null; setError(null); setLoadedPreset(null);
+        try {
+            if (file.type === 'image/png') { settingsData = await extractJsonFromPng(file); if (!settingsData) throw new Error("No preset data found in PNG."); }
+            else if (file.type === 'application/json') { settingsData = JSON.parse(await file.text()); }
+            else { throw new Error("Unsupported file type."); }
+            if (settingsData && settingsData.viewId && settingsData.state) {
+                 const appConfig = settings?.apps.find(app => app.id === settingsData.viewId);
+                if (appConfig && (appConfig as any).supportsCanvasPreset) { setLoadedPreset(settingsData); }
+                else { throw new Error(`The app "${settingsData.viewId}" does not support presets.`); }
+            } else { throw new Error("Invalid preset file format."); }
+        } catch (e) { console.error("Failed to load preset file", e); setError(e instanceof Error ? e.message : "Could not read preset file."); }
+    };
+    
+    const deleteLayer = useCallback((layerId: string) => {
+        if (!layerId) return; beginInteraction();
+        const newLayers = layers.filter(l => l.id !== layerId); setLayers(newLayers);
+        const newHistory = history.slice(0, historyIndex + 1); newHistory.push(newLayers); setHistory(newHistory); setHistoryIndex(newHistory.length - 1);
+        interactionStartHistoryState.current = null; setSelectedLayerIds(ids => ids.filter(id => id !== layerId));
+    }, [layers, history, historyIndex, beginInteraction]);
+    
+    const duplicateLayer = useCallback((layerId: string): Layer => {
+        beginInteraction(); let newLayers = [...layers]; const layerToDup = layers.find(l => l.id === layerId);
+        if (!layerToDup) { console.error("Layer to duplicate not found:", layerId); return { id: '', type: 'image', x:0, y:0, width:0, height:0, rotation: 0, opacity: 100, blendMode: 'source-over', isVisible: true, isLocked: false }; }
+        const newLayer: Layer = Object.assign({ id: Math.random().toString(36).substring(2, 9), x: layerToDup.x + 20, y: layerToDup.y + 20 }, layerToDup as any) as Layer;
+        const originalIndex = layers.findIndex(l => l.id === layerId); newLayers.splice(originalIndex >= 0 ? originalIndex : 0, 0, newLayer);
+        setLayers(newLayers); setSelectedLayerIds([newLayer.id]);
+        const newHistory = history.slice(0, historyIndex + 1); newHistory.push(newLayers); setHistory(newHistory); setHistoryIndex(newHistory.length - 1);
+        interactionStartHistoryState.current = null;
+        return newLayer;
+    }, [layers, history, historyIndex, beginInteraction]);
+    
+    return {
+        isOpen, t, imageGallery, generationHistory, canvasSettings, isInfiniteCanvas, canvasInitialized, layers, history, historyIndex, selectedLayerIds,
+        selectedLayers, selectionBoundingBox, isGalleryOpen, isWebcamOpen, runningJobCount, error, isConfirmingClose, isConfirmingNew, aiPrompt, isSimpleImageMode,
+        aiPreset, presets, aiProcessLog, isLogVisible, isChatbotOpen, loadedPreset, activeCanvasTool, shapeFillColor, hasAiLog: aiProcessLog.length > 0,
+        selectedLayersForPreset: selectedLayers, selectedLayerId: selectedLayer?.id || null, panX, panY, scale, zoomDisplay, canvasViewRef, fileInputRef,
+        panStartRef, isSpacePanning, interaction, setCanvasSettings, setIsInfiniteCanvas, setCanvasInitialized, setLayers, setHistory, setHistoryIndex,
+        setSelectedLayerIds, setIsGalleryOpen, setIsWebcamOpen, setRunningJobCount, setError, setInteraction, setIsConfirmingClose, setIsConfirmingNew,
+        setAiPrompt, setIsSimpleImageMode, setAiPreset, setPresets, setAiProcessLog, setIsLogVisible, setIsChatbotOpen, setLoadedPreset,
+        setActiveCanvasTool, setShapeFillColor, handleUndo, canUndo, handleRedo, canRedo, beginInteraction, handleCloseAndReset, handleAddImage,
+        handleCloseChatbot, handleConfirmNew, onHide, onClose: handleRequestClose, onSave: handleSave, onNew: handleNew, onAddText: handleAddTextLayer,
+        onAddImage: () => setIsGalleryOpen(true), onCanvasSettingsChange: setCanvasSettings, onLayerDelete: deleteSelectedLayers,
+        onLayerSelect: handleSelectLayer, onLayerUpdate: updateLayerProperties, onLayersReorder: reorderLayers, onGenerateAILayer: handleGenerateAILayer,
+        onCancelGeneration: handleCancelGeneration, onPresetFileLoad: handlePresetFile, onGenerateFromPreset: handleGenerateFromPreset,
+        onResizeSelectedLayers: handleResizeSelectedLayers, onOpenChatbot: handleOpenChatbot, onUpdateLayers: updateMultipleLayers,
+        exportSelectedLayer: handleExportSelectedLayers, onFilesDrop: handleFilesDrop, onMultiLayerAction: handleMultiLayerAction,
+        onDuplicateForDrag: handleDuplicateForDrag, handleMergeLayers, openImageEditor, deleteSelectedLayers, duplicateSelectedLayers,
+        handleExportSelectedLayers, handleBakeSelectedLayer, captureLayer, addLayer, deleteLayer, duplicateLayer, handleCreateNew, handleUploadClick,
+        handleFileSelected, handleStartScreenDragOver, handleStartScreenDragLeave, handleStartScreenDrop, isStartScreenDraggingOver,
+        aiNumberOfImages, setAiNumberOfImages, aiAspectRatio, setAiAspectRatio, removeWatermark, setRemoveWatermark
+    };
+}

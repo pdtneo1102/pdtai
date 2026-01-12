@@ -7,7 +7,7 @@
 // This file contains shared type definitions for UI components and application state.
 import React from 'react';
 
-// FIX: Define JSX.IntrinsicElements globally to resolve "Property '...' does not exist on type 'JSX.IntrinsicElements'" errors across the project.
+// FIX: Define JSX.IntrinsicElements globally and within React namespace to resolve "Property '...' does not exist on type 'JSX.IntrinsicElements'" errors across the project.
 declare global {
   namespace JSX {
     interface IntrinsicElements {
@@ -19,6 +19,7 @@ declare global {
       textarea: any;
       img: any;
       video: any;
+      canvas: any;
       footer: any;
       header: any;
       main: any;
@@ -49,6 +50,10 @@ declare global {
       option: any;
       form: any;
       b: any;
+      pre: any;
+      code: any;
+      strong: any;
+      em: any;
       [elemName: string]: any;
     }
   }
