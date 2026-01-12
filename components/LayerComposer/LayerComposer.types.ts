@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -46,7 +47,8 @@ export type Interaction = {
 // --- Layer Types ---
 export type BlendMode = 'source-over' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'color-dodge' | 'color-burn' | 'hard-light' | 'soft-light' | 'difference' | 'exclusion' | 'hue' | 'saturation' | 'color' | 'luminosity';
 
-export interface Layer {
+// Changed Layer from interface to type
+export type Layer = {
     id: string;
     type: 'image' | 'text' | 'shape';
     x: number;

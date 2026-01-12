@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -13,8 +14,10 @@ import {
     ImageUploader,
     ResultsView,
     ImageForZip,
+    AppOptionsLayout,
     OptionsPanel,
     type BeautyCreatorState,
+    type GeneratedAvatarImage,
     handleFileUpload,
     useLightbox,
     useVideoGeneration,
@@ -70,7 +73,7 @@ const BeautyCreator: React.FC<BeautyCreatorProps> = (props) => {
     }, [appState.options.notes]);
     
     const outputLightboxImages = appState.selectedIdeas
-        .map(idea => appState.generatedImages[idea])
+        .map(idea => (appState.generatedImages as Record<string, GeneratedAvatarImage>)[idea])
         .filter(img => img?.status === 'done' && img.url)
         .map(img => img.url!);
 
@@ -136,7 +139,8 @@ const BeautyCreator: React.FC<BeautyCreatorProps> = (props) => {
         if (appState.styleReferenceImage) {
             const idea = "Style Reference";
             const preGenState = { ...appState, selectedIdeas: [idea] };
-            const generatingState = { ...appState, stage: 'generating' as const, generatedImages: { [idea]: { status: 'pending' as const } }, selectedIdeas: [idea] };
+            // FIX: Narrow type of generatedImages and use correct status literal.
+            const generatingState = { ...appState, stage: 'generating' as const, generatedImages: { [idea]: { status: 'pending' as const } } as Record<string, GeneratedAvatarImage>, selectedIdeas: [idea] };
             onStateChange(generatingState);
 
             try {
@@ -150,7 +154,7 @@ const BeautyCreator: React.FC<BeautyCreatorProps> = (props) => {
                 onStateChange({
                     ...generatingState,
                     stage: 'results',
-                    generatedImages: { [idea]: { status: 'done' as const, url: urlWithMetadata } },
+                    generatedImages: { [idea]: { status: 'done' as const, url: urlWithMetadata } } as Record<string, GeneratedAvatarImage>,
                     historicalImages: [...generatingState.historicalImages, { idea, url: urlWithMetadata }],
                 });
                 addImagesToGallery([urlWithMetadata]);
@@ -159,7 +163,7 @@ const BeautyCreator: React.FC<BeautyCreatorProps> = (props) => {
                 onStateChange({
                     ...generatingState,
                     stage: 'results',
-                    generatedImages: { [idea]: { status: 'error' as const, error: errorMessage } },
+                    generatedImages: { [idea]: { status: 'error' as const, error: errorMessage } } as Record<string, GeneratedAvatarImage>,
                 });
             }
             return;
@@ -214,8 +218,8 @@ const BeautyCreator: React.FC<BeautyCreatorProps> = (props) => {
         onStateChange({ ...appState, stage: 'generating' });
         
         const initialGeneratedImages = { ...appState.generatedImages };
-        // FIX: Add 'as const' to prevent type widening of 'status' to string.
-        ideasToGenerate.forEach(idea => { initialGeneratedImages[idea] = { status: 'pending' as const }; });
+        // FIX: Cast for type safety.
+        ideasToGenerate.forEach(idea => { (initialGeneratedImages as Record<string, GeneratedAvatarImage>)[idea] = { status: 'pending' as const }; });
         onStateChange({ ...appState, stage: 'generating', generatedImages: initialGeneratedImages, selectedIdeas: ideasToGenerate });
 
         const concurrencyLimit = 2;
@@ -239,8 +243,10 @@ const BeautyCreator: React.FC<BeautyCreatorProps> = (props) => {
                 
                 currentAppState = {
                     ...currentAppState,
-                    // FIX: Add 'as const' to prevent type widening of 'status' to string.
-                    generatedImages: { ...currentAppState.generatedImages, [idea]: { status: 'done' as const, url: urlWithMetadata } },
+                    generatedImages: {
+                        ...currentAppState.generatedImages,
+                        [idea]: { status: 'done' as const, url: urlWithMetadata },
+                    },
                     historicalImages: [...currentAppState.historicalImages, { idea, url: urlWithMetadata }],
                 };
                 onStateChange(currentAppState);
@@ -250,8 +256,10 @@ const BeautyCreator: React.FC<BeautyCreatorProps> = (props) => {
                 const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
                  currentAppState = {
                     ...currentAppState,
-                    // FIX: Add 'as const' to prevent type widening of 'status' to string.
-                    generatedImages: { ...currentAppState.generatedImages, [idea]: { status: 'error' as const, error: errorMessage } },
+                    generatedImages: {
+                        ...currentAppState.generatedImages,
+                        [idea]: { status: 'error' as const, error: errorMessage },
+                    },
                 };
                 onStateChange(currentAppState);
             }
@@ -277,15 +285,15 @@ const BeautyCreator: React.FC<BeautyCreatorProps> = (props) => {
         await executeGeneration([t('beautyCreator_randomConcept')]);
     };
 
-    const handleRegeneration = async (idea: string, prompt: string) => {
-        // FIX: Cast to any to fix type error on 'status' property.
-        const imageToEditState = appState.generatedImages[idea] as any;
+    const handleRegenerateIdea = async (idea: string, prompt: string) => {
+        // FIX: Cast appState.generatedImages to Record to ensure properties are found.
+        const imageToEditState = (appState.generatedImages as Record<string, GeneratedAvatarImage>)[idea];
         if (!imageToEditState || imageToEditState.status !== 'done' || !imageToEditState.url) return;
 
         const imageUrlToEdit = imageToEditState.url;
         const preGenState = { ...appState };
-        // FIX: Add 'as const' to prevent type widening of 'status' to string.
-        onStateChange({ ...appState, generatedImages: { ...appState.generatedImages, [idea]: { status: 'pending' as const } } });
+        // FIX: Narrow and cast for type safe status update.
+        onStateChange({ ...appState, generatedImages: { ...appState.generatedImages, [idea]: { status: 'pending' as const } } as Record<string, GeneratedAvatarImage> });
 
         try {
             const resultUrl = await editImageWithPrompt(imageUrlToEdit, prompt);
@@ -297,15 +305,13 @@ const BeautyCreator: React.FC<BeautyCreatorProps> = (props) => {
             logGeneration('beauty-creator', preGenState, urlWithMetadata);
             onStateChange({
                 ...appState,
-                // FIX: Add 'as const' to prevent type widening of 'status' to string.
-                generatedImages: { ...appState.generatedImages, [idea]: { status: 'done' as const, url: urlWithMetadata } },
+                generatedImages: { ...appState.generatedImages, [idea]: { status: 'done' as const, url: urlWithMetadata } } as Record<string, GeneratedAvatarImage>,
                 historicalImages: [...appState.historicalImages, { idea: `${idea}-edit`, url: urlWithMetadata }],
             });
             addImagesToGallery([urlWithMetadata]);
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
-            // FIX: Add 'as const' to prevent type widening of 'status' to string.
-            onStateChange({ ...appState, generatedImages: { ...appState.generatedImages, [idea]: { status: 'error' as const, error: errorMessage } } });
+            onStateChange({ ...appState, generatedImages: { ...appState.generatedImages, [idea]: { status: 'error' as const, error: errorMessage } } as Record<string, GeneratedAvatarImage> });
         }
     };
 
@@ -323,7 +329,7 @@ const BeautyCreator: React.FC<BeautyCreatorProps> = (props) => {
     const handleGeneratedImageChange = (idea: string) => (newUrl: string) => {
         const newGeneratedImages = { ...appState.generatedImages, [idea]: { status: 'done' as 'done', url: newUrl } };
         const newHistorical = [...appState.historicalImages, { idea: `${idea}-edit`, url: newUrl }];
-        onStateChange({ ...appState, generatedImages: newGeneratedImages, historicalImages: newHistorical });
+        onStateChange({ ...appState, generatedImages: newGeneratedImages as Record<string, GeneratedAvatarImage>, historicalImages: newHistorical });
         addImagesToGallery([newUrl]);
     };
 
@@ -350,7 +356,8 @@ const BeautyCreator: React.FC<BeautyCreatorProps> = (props) => {
         return t('beautyCreator_createButton');
     };
     
-    const hasPartialError = appState.stage === 'results' && Object.values(appState.generatedImages).some(img => img.status === 'error');
+    // FIX: Cast generatedImages for type safety in .some() call.
+    const hasPartialError = appState.stage === 'results' && Object.values(appState.generatedImages as Record<string, GeneratedAvatarImage>).some((img: GeneratedAvatarImage) => img.status === 'error');
     const inputImagesForResults = [];
     if (appState.uploadedImage) inputImagesForResults.push({ url: appState.uploadedImage, caption: t('common_originalImage'), onClick: () => openLightbox(lightboxImages.indexOf(appState.uploadedImage!)) });
     if (appState.styleReferenceImage) inputImagesForResults.push({ url: appState.styleReferenceImage, caption: t('common_referenceImage'), onClick: () => openLightbox(lightboxImages.indexOf(appState.styleReferenceImage!)) });
@@ -435,10 +442,11 @@ const BeautyCreator: React.FC<BeautyCreatorProps> = (props) => {
             {(appState.stage === 'generating' || appState.stage === 'results') && (
                 <ResultsView stage={appState.stage} inputImages={inputImagesForResults} error={appState.error} hasPartialError={hasPartialError} actions={ <> {appState.historicalImages.length > 0 && !appState.error && ( <button onClick={handleDownloadAll} className="btn btn-secondary"> {t('common_downloadAll')} </button> )} <button onClick={handleBackToOptions} className="btn btn-secondary"> {t('common_editOptions')} </button> <button onClick={onReset} className="btn btn-secondary"> {t('common_startOver')} </button> </> } >
                     {appState.selectedIdeas.map((idea, index) => {
-                        const imageState = appState.generatedImages[idea];
+                        // FIX: Cast imageState to record and narrow.
+                        const imageState = (appState.generatedImages as Record<string, GeneratedAvatarImage>)[idea];
                         const currentImageIndexInLightbox = imageState?.url ? lightboxImages.indexOf(imageState.url) : -1;
                         return ( <motion.div className="w-full md:w-auto flex-shrink-0" key={idea} initial={{ opacity: 0, scale: 0.5, y: 100 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ type: 'spring', stiffness: 80, damping: 15, delay: index * 0.15 }} >
-                            <ActionablePolaroidCard type="output" caption={idea === 'Style Reference' ? t('common_result') : idea} status={imageState?.status || 'pending'} mediaUrl={imageState?.url} error={imageState?.error} onClick={!imageState?.error && imageState?.url ? () => openLightbox(currentImageIndexInLightbox) : undefined} onImageChange={handleGeneratedImageChange(idea)} onRegenerate={(prompt) => handleRegeneration(idea, prompt)} onGenerateVideoFromPrompt={(prompt) => imageState?.url && generateVideo(imageState.url, prompt)} regenerationTitle={t('common_regenTitle')} regenerationDescription={t('common_regenDescription')} regenerationPlaceholder={t('beautyCreator_regenPlaceholder')} />
+                            <ActionablePolaroidCard type="output" caption={idea === 'Style Reference' ? t('common_result') : idea} status={imageState?.status || 'pending'} mediaUrl={imageState?.url} error={imageState?.error} onClick={!imageState?.error && imageState?.url ? () => openLightbox(currentImageIndexInLightbox) : undefined} onImageChange={handleGeneratedImageChange(idea)} onRegenerate={(prompt) => handleRegenerateIdea(idea, prompt)} onGenerateVideoFromPrompt={(prompt) => imageState?.url && generateVideo(imageState.url, prompt)} regenerationTitle={t('common_regenTitle')} regenerationDescription={t('common_regenDescription')} regenerationPlaceholder={t('beautyCreator_regenPlaceholder')} />
                         </motion.div> );
                     })}
                     {appState.historicalImages.map(({ url: sourceUrl }) => {

@@ -5,7 +5,7 @@
 */
 import React, { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { addSunEffectToImage, editImageWithPrompt } from '../services/geminiService';
+import { addSunEffectToImage, editImageWithPrompt, generateSunEffectWithStyle } from '../services/geminiService';
 import ActionablePolaroidCard from './ActionablePolaroidCard';
 import Lightbox from './Lightbox';
 import { 
@@ -89,6 +89,33 @@ const SunEffectCreator: React.FC<SunEffectCreatorProps> = (props) => {
 
         try {
             const resultUrl = await addSunEffectToImage(appState.uploadedImage, appState.options);
+            const settingsToEmbed = {
+                viewId: 'sun-effect-creator',
+                state: { ...appState, stage: 'configuring', generatedImage: null, historicalImages: [], error: null },
+            };
+            const urlWithMetadata = await embedJsonInPng(resultUrl, settingsToEmbed, settings.enableImageMetadata);
+            logGeneration('sun-effect-creator', preGenState, urlWithMetadata);
+            onStateChange({
+                ...appState,
+                stage: 'results',
+                generatedImage: urlWithMetadata,
+                historicalImages: [...appState.historicalImages, urlWithMetadata],
+            });
+            addImagesToGallery([urlWithMetadata]);
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
+            onStateChange({ ...appState, stage: 'results', error: errorMessage });
+        }
+    };
+
+    const executeStyleGeneration = async (styleIndex: number) => {
+        if (!appState.uploadedImage) return;
+        
+        const preGenState = { ...appState };
+        onStateChange({ ...appState, stage: 'generating', error: null });
+
+        try {
+            const resultUrl = await generateSunEffectWithStyle(appState.uploadedImage, styleIndex, appState.options.removeWatermark);
             const settingsToEmbed = {
                 viewId: 'sun-effect-creator',
                 state: { ...appState, stage: 'configuring', generatedImage: null, historicalImages: [], error: null },
@@ -222,6 +249,36 @@ const SunEffectCreator: React.FC<SunEffectCreatorProps> = (props) => {
                                     onChange={(val) => handleOptionChange('position', val)}
                                 />
                             </div>
+                            
+                            <div className="pt-4 border-t border-white/5">
+                                <label className="block text-left base-font font-bold text-lg text-neutral-200 mb-3">
+                                    {t('sunEffectCreator_quickStylesTitle')}
+                                </label>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <button 
+                                        onClick={() => executeStyleGeneration(0)} 
+                                        className="btn btn-secondary !text-xs !py-2 hover:border-yellow-400/50"
+                                        disabled={isLoading}
+                                    >
+                                        {t('sunEffectCreator_style1')}
+                                    </button>
+                                    <button 
+                                        onClick={() => executeStyleGeneration(1)} 
+                                        className="btn btn-secondary !text-xs !py-2 hover:border-yellow-400/50"
+                                        disabled={isLoading}
+                                    >
+                                        {t('sunEffectCreator_style2')}
+                                    </button>
+                                    <button 
+                                        onClick={() => executeStyleGeneration(2)} 
+                                        className="btn btn-secondary !text-xs !py-2 hover:border-yellow-400/50"
+                                        disabled={isLoading}
+                                    >
+                                        {t('sunEffectCreator_style3')}
+                                    </button>
+                                </div>
+                            </div>
+
                             <div>
                                 <label htmlFor="notes" className="block text-left base-font font-bold text-lg text-neutral-200 mb-2">{t('common_additionalNotes')}</label>
                                 <textarea

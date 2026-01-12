@@ -5,6 +5,54 @@
 */
 
 // This file contains shared type definitions for UI components and application state.
+import React from 'react';
+
+// FIX: Define JSX.IntrinsicElements globally to resolve "Property '...' does not exist on type 'JSX.IntrinsicElements'" errors across the project.
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      div: any;
+      span: any;
+      button: any;
+      input: any;
+      label: any;
+      textarea: any;
+      img: any;
+      video: any;
+      footer: any;
+      header: any;
+      main: any;
+      aside: any;
+      section: any;
+      h1: any;
+      h2: any;
+      h3: any;
+      h4: any;
+      h5: any;
+      p: any;
+      ul: any;
+      li: any;
+      ol: any;
+      a: any;
+      br: any;
+      svg: any;
+      path: any;
+      circle: any;
+      rect: any;
+      g: any;
+      text: any;
+      ellipse: any;
+      blockquote: any;
+      hr: any;
+      kbd: any;
+      select: any;
+      option: any;
+      form: any;
+      b: any;
+      [elemName: string]: any;
+    }
+  }
+}
 
 // Base types
 export interface ImageForZip {
@@ -295,7 +343,6 @@ export interface ImageInterpolationState {
     error: string | null;
 }
 
-// FIX: Added missing ToyModelCreatorState definition
 export interface ToyModelCreatorState {
     stage: 'idle' | 'configuring' | 'generating' | 'results';
     concept: string;
@@ -332,7 +379,6 @@ export interface ToyModelCreatorState {
     error: string | null;
 }
 
-// FIX: Added missing SceneState definition for Storyboarding
 export interface SceneState {
     scene: number;
     startFrame: {
@@ -394,6 +440,39 @@ export type SunEffectCreatorView = { viewId: 'sun-effect-creator'; state: SunEff
 export type ImageInterpolationView = { viewId: 'image-interpolation'; state: ImageInterpolationState };
 export type ImageToRealView = { viewId: 'image-to-real'; state: ImageToRealState };
 export type ToyModelCreatorView = { viewId: 'toy-model-creator'; state: ToyModelCreatorState };
+
+// Changed Layer from interface to type
+export type Layer = {
+    id: string;
+    type: 'image' | 'text' | 'shape';
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    rotation: number;
+    opacity: number;
+    blendMode: BlendMode;
+    isVisible: boolean;
+    isLocked: boolean;
+    // Image-specific
+    url?: string;
+    // Text-specific
+    text?: string;
+    fontFamily?: string;
+    fontSize?: number;
+    fontWeight?: string;
+    fontStyle?: 'normal' | 'italic';
+    textTransform?: 'none' | 'uppercase';
+    textAlign?: 'left' | 'center' | 'right';
+    color?: string;
+    lineHeight?: number;
+    // Shape-specific
+    shapeType?: 'rectangle' | 'ellipse';
+    fillColor?: string;
+    borderRadius?: number;
+}
+
+export type BlendMode = 'source-over' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'color-dodge' | 'color-burn' | 'hard-light' | 'soft-light' | 'difference' | 'exclusion' | 'hue' | 'saturation' | 'color' | 'luminosity';
 
 
 export type ViewState =

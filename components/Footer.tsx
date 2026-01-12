@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -38,13 +39,13 @@ const Footer: React.FC<{}> = () => {
                 <div className="flex items-center flex-wrap justify-center gap-1 sm:gap-2">
                     <div className="flex items-center gap-2">
                         <div className="theme-dropdown">
-                            <div className="theme-dropdown-button !cursor-default opacity-80">
+                            <div className="theme-dropdown-button !cursor-default opacity-80 !min-w-0">
                                 <span className="flex items-center gap-2">
                                      <span
                                         className="theme-swatch"
                                         style={{ background: `linear-gradient(to right, ${currentThemeInfo.colors[0]}, ${currentThemeInfo.colors[1]})` }}
                                     ></span>
-                                    <span className="base-font">{currentThemeInfo.name}</span>
+                                    {/* Text removed as requested */}
                                 </span>
                             </div>
                         </div>

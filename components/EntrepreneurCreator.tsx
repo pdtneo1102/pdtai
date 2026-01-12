@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -15,6 +16,7 @@ import {
     ResultsView,
     ImageForZip,
     type EntrepreneurCreatorState,
+    type GeneratedAvatarImage,
     handleFileUpload,
     useLightbox,
     useVideoGeneration,
@@ -69,7 +71,7 @@ const EntrepreneurCreator: React.FC<EntrepreneurCreatorProps> = (props) => {
     const ASPECT_RATIO_OPTIONS = t('aspectRatioOptions');
 
     const outputLightboxImages = appState.selectedIdeas
-        .map(idea => appState.generatedImages[idea])
+        .map(idea => (appState.generatedImages as Record<string, GeneratedAvatarImage>)[idea])
         .filter(img => img?.status === 'done' && img.url)
         .map(img => img.url!);
 
@@ -146,10 +148,8 @@ const EntrepreneurCreator: React.FC<EntrepreneurCreatorProps> = (props) => {
             const idea = "Style Reference";
             const preGenState = { ...appState, selectedIdeas: [idea] };
             const stage: 'generating' = 'generating';
-            // FIX: Capture intermediate state to pass to subsequent updates, avoiding stale state issues.
-            // FIX: The status property was being inferred as a generic 'string'. Using 'as const' ensures
-            // it's typed as a literal, which is assignable to the 'ImageStatus' type.
-            const generatingState = { ...appState, stage, generatedImages: { [idea]: { status: 'pending' as const } }, selectedIdeas: [idea] };
+            // FIX: Explicitly cast status literal.
+            const generatingState = { ...appState, stage, generatedImages: { [idea]: { status: 'pending' as const } } as Record<string, GeneratedAvatarImage>, selectedIdeas: [idea] };
             onStateChange(generatingState);
 
             try {
@@ -167,21 +167,19 @@ const EntrepreneurCreator: React.FC<EntrepreneurCreatorProps> = (props) => {
                 };
                 const urlWithMetadata = await embedJsonInPng(resultUrl, settingsToEmbed, settings.enableImageMetadata);
                 logGeneration('entrepreneur-creator', preGenState, urlWithMetadata);
-                // FIX: Pass a state object instead of a function to `onStateChange`.
                 onStateChange({
                     ...generatingState,
                     stage: 'results',
-                    generatedImages: { [idea]: { status: 'done' as const, url: urlWithMetadata } },
+                    generatedImages: { [idea]: { status: 'done' as const, url: urlWithMetadata } } as Record<string, GeneratedAvatarImage>,
                     historicalImages: [...generatingState.historicalImages, { idea, url: urlWithMetadata }],
                 });
                 addImagesToGallery([urlWithMetadata]);
             } catch (err) {
                  const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
-                // FIX: Pass a state object instead of a function to `onStateChange`.
                 onStateChange({
                     ...generatingState,
                     stage: 'results',
-                    generatedImages: { [idea]: { status: 'error' as const, error: errorMessage } },
+                    generatedImages: { [idea]: { status: 'error' as const, error: errorMessage } } as Record<string, GeneratedAvatarImage>,
                 });
             }
             return;
@@ -239,9 +237,9 @@ const EntrepreneurCreator: React.FC<EntrepreneurCreatorProps> = (props) => {
         onStateChange({ ...appState, stage: stage });
         
         const initialGeneratedImages = { ...appState.generatedImages };
+        // FIX: Explicitly cast status literal.
         ideasToGenerate.forEach(idea => {
-            // FIX: Add 'as const' to prevent type widening of 'status' to string.
-            initialGeneratedImages[idea] = { status: 'pending' as const };
+            (initialGeneratedImages as Record<string, GeneratedAvatarImage>)[idea] = { status: 'pending' as const };
         });
         
         onStateChange({ ...appState, stage: stage, generatedImages: initialGeneratedImages, selectedIdeas: ideasToGenerate });
@@ -269,7 +267,7 @@ const EntrepreneurCreator: React.FC<EntrepreneurCreatorProps> = (props) => {
                     ...currentAppState,
                     generatedImages: {
                         ...currentAppState.generatedImages,
-                        // FIX: Add 'as const' to prevent type widening of 'status' to string.
+                        // FIX: Explicitly cast status literal.
                         [idea]: { status: 'done' as const, url: urlWithMetadata },
                     },
                     historicalImages: [...currentAppState.historicalImages, { idea, url: urlWithMetadata }],
@@ -283,7 +281,7 @@ const EntrepreneurCreator: React.FC<EntrepreneurCreatorProps> = (props) => {
                     ...currentAppState,
                     generatedImages: {
                         ...currentAppState.generatedImages,
-                        // FIX: Add 'as const' to prevent type widening of 'status' to string.
+                        // FIX: Explicitly cast status literal.
                         [idea]: { status: 'error' as const, error: errorMessage },
                     },
                 };
@@ -323,8 +321,8 @@ const EntrepreneurCreator: React.FC<EntrepreneurCreatorProps> = (props) => {
     };
 
     const handleRegenerateIdea = async (idea: string, customPrompt: string) => {
-        // FIX: Cast to any to fix type error on 'status' property.
-        const imageToEditState = appState.generatedImages[idea] as any;
+        // FIX: Cast appState.generatedImages to Record<string, GeneratedAvatarImage> for type narrowing.
+        const imageToEditState = (appState.generatedImages as Record<string, GeneratedAvatarImage>)[idea];
         if (!imageToEditState || imageToEditState.status !== 'done' || !imageToEditState.url) {
             return;
         }
@@ -334,8 +332,8 @@ const EntrepreneurCreator: React.FC<EntrepreneurCreatorProps> = (props) => {
         
         onStateChange({
             ...appState,
-            // FIX: Add 'as const' to prevent type widening of 'status' to string.
-            generatedImages: { ...appState.generatedImages, [idea]: { status: 'pending' as const } }
+            // FIX: Explicitly cast status literal.
+            generatedImages: { ...appState.generatedImages, [idea]: { status: 'pending' as const } } as Record<string, GeneratedAvatarImage>
         });
 
         try {
@@ -348,8 +346,8 @@ const EntrepreneurCreator: React.FC<EntrepreneurCreatorProps> = (props) => {
             logGeneration('entrepreneur-creator', preGenState, urlWithMetadata);
             onStateChange({
                 ...appState,
-                // FIX: Add 'as const' to prevent type widening of 'status' to string.
-                generatedImages: { ...appState.generatedImages, [idea]: { status: 'done' as const, url: urlWithMetadata } },
+                // FIX: Explicitly cast status literal.
+                generatedImages: { ...appState.generatedImages, [idea]: { status: 'done' as const, url: urlWithMetadata } } as Record<string, GeneratedAvatarImage>,
                 historicalImages: [...appState.historicalImages, { idea: `${idea}-edit`, url: urlWithMetadata }],
             });
             addImagesToGallery([urlWithMetadata]);
@@ -357,8 +355,8 @@ const EntrepreneurCreator: React.FC<EntrepreneurCreatorProps> = (props) => {
             const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
              onStateChange({
                 ...appState,
-                // FIX: Add 'as const' to prevent type widening of 'status' to string.
-                generatedImages: { ...appState.generatedImages, [idea]: { status: 'error' as const, error: errorMessage } }
+                // FIX: Explicitly cast status literal.
+                generatedImages: { ...appState.generatedImages, [idea]: { status: 'error' as const, error: errorMessage } } as Record<string, GeneratedAvatarImage>
             });
             console.error(`Failed to regenerate image for ${idea}:`, err);
         }
@@ -367,7 +365,7 @@ const EntrepreneurCreator: React.FC<EntrepreneurCreatorProps> = (props) => {
      const handleGeneratedImageChange = (idea: string) => (newUrl: string) => {
         const newGeneratedImages = { ...appState.generatedImages, [idea]: { status: 'done' as 'done', url: newUrl } };
         const newHistorical = [...appState.historicalImages, { idea: `${idea}-edit`, url: newUrl }];
-        onStateChange({ ...appState, generatedImages: newGeneratedImages, historicalImages: newHistorical });
+        onStateChange({ ...appState, generatedImages: newGeneratedImages as Record<string, GeneratedAvatarImage>, historicalImages: newHistorical });
         addImagesToGallery([newUrl]);
     };
     
@@ -400,7 +398,9 @@ const EntrepreneurCreator: React.FC<EntrepreneurCreatorProps> = (props) => {
         if (isLoading) return t('common_creating');
         return t('entrepreneurCreator_createButton');
     };
-    const hasPartialError = appState.stage === 'results' && Object.values(appState.generatedImages).some(img => img.status === 'error');
+    
+    // FIX: Cast generatedImages for type safe property access in .some() call.
+    const hasPartialError = appState.stage === 'results' && Object.values(appState.generatedImages as Record<string, GeneratedAvatarImage>).some((img: GeneratedAvatarImage) => img.status === 'error');
 
     const inputImagesForResults = [];
     if (appState.uploadedImage) {
@@ -598,7 +598,8 @@ const EntrepreneurCreator: React.FC<EntrepreneurCreatorProps> = (props) => {
                     }
                 >
                     {appState.selectedIdeas.map((idea, index) => {
-                        const imageState = appState.generatedImages[idea];
+                        // FIX: Narrow the type of imageState.
+                        const imageState = (appState.generatedImages as Record<string, GeneratedAvatarImage>)[idea];
                         const currentImageIndexInLightbox = imageState?.url ? lightboxImages.indexOf(imageState.url) : -1;
                         return (
                             <motion.div

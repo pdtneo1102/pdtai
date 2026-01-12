@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -109,7 +110,17 @@ export const StoryboardingModal: React.FC<StoryboardingModalProps> = ({ isOpen, 
         return Array.isArray(options) ? options : [];
     }, [t]);
 
-    // --- NEW: History Management ---
+    // FIX: Define lightboxImages correctly based on both reference images and generated frame images.
+    const lightboxImages = useMemo(() => {
+        const images: string[] = [];
+        scenes.forEach(s => {
+            if (s.startFrame.imageUrl) images.push(s.startFrame.imageUrl);
+            if (s.endFrame.imageUrl) images.push(s.endFrame.imageUrl);
+        });
+        return [...referenceImages, ...images];
+    }, [scenes, referenceImages]);
+
+    // --- History Management ---
     const updateScenesAndHistory = useCallback((newScenes: SceneState[]) => {
         const currentScenes = history[historyIndex];
         if (currentScenes && JSON.stringify(newScenes) === JSON.stringify(currentScenes)) {
@@ -139,32 +150,6 @@ export const StoryboardingModal: React.FC<StoryboardingModalProps> = ({ isOpen, 
             setScenes(history[newIndex]);
         }
     }, [history, historyIndex, canRedo]);
-
-    const handleStyleChange = (displayValue: string) => {
-        if (!displayValue) {
-            setStyle(''); // Handle empty selection, which means "Auto"
-            return;
-        }
-        const match = displayValue.match(/\(([^)]+)\)/);
-        const aiValue = match ? match[1] : displayValue;
-        setStyle(aiValue);
-    };
-    
-    const displayStyleValue = useMemo(() => {
-        if (!style) return '';
-        const allOptions: string[] = styleOptions.flatMap((opt: any) =>
-            typeof opt === 'string' ? [opt] : (opt.options || [])
-        );
-        for (const fullDisplayValue of allOptions) {
-            const match = fullDisplayValue.match(/\(([^)]+)\)/);
-            const aiValue = match ? match[1] : fullDisplayValue;
-            if (aiValue === style) {
-                return fullDisplayValue;
-            }
-        }
-        return style;
-    }, [style, styleOptions]);
-
 
     const resetState = useCallback(() => {
         setActiveInput('prompt');
@@ -313,899 +298,500 @@ export const StoryboardingModal: React.FC<StoryboardingModalProps> = ({ isOpen, 
             }
             setScriptSummary(result);
         } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : t('storyboarding_error_scenario');
-            setError(errorMessage);
+            const errorMessage = err instanceof Error ? err.message : "Error";
+            setError(t('storyboarding_error_scenario', errorMessage));
         } finally {
             setIsLoading(false);
         }
     };
-    
-    const handleDevelopScenesFromSummary = async () => {
+
+    const handleDevelopScenes = async () => {
         if (!scriptSummary) return;
         setIsLoading(true);
-        setLoadingMessage(t('storyboarding_developing_scenes'));
         setError(null);
-        updateScenesAndHistory([]);
-    
+        setLoadingMessage(t('storyboarding_developing_scenes'));
         try {
-            const summaryWithSceneCount = { ...scriptSummary, numberOfScenes };
-            const finalScenario = await developScenesFromSummary(summaryWithSceneCount, storyboardLanguage, scriptType);
-    
-            if (numberOfScenes === 1 && finalScenario.scenes.length > 0) {
-                const newScenes = [mapServiceSceneToState(finalScenario.scenes[0])];
-                updateScenesAndHistory(newScenes);
-                await handleGenerateVideoPromptForScene(0, 'json', newScenes);
-            } else {
-                updateScenesAndHistory(finalScenario.scenes.map(mapServiceSceneToState));
-            }
+            const fullScenario = await developScenesFromSummary(scriptSummary, storyboardLanguage, scriptType);
+            const newScenes = fullScenario.scenes.map(mapServiceSceneToState);
+            updateScenesAndHistory(newScenes);
         } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : t('storyboarding_error_develop');
-            setError(errorMessage);
+            const errorMessage = err instanceof Error ? err.message : "Error";
+            setError(t('storyboarding_error_develop', errorMessage));
         } finally {
             setIsLoading(false);
         }
     };
-    
-    const handleDevelopFromText = async () => {
-        if (!scriptText.trim()) {
-            setError(t('storyboarding_error_noText'));
-            return;
-        }
-        setIsLoading(true);
-        setLoadingMessage(t('storyboarding_developing_scenes'));
-        setError(null);
-        updateScenesAndHistory([]);
-        
-        const summaryForDevelopment: ScriptSummary = {
-            title: t('storyboarding_scriptType_auto'),
-            characters: t('storyboarding_scriptType_auto'),
-            setting: t('storyboarding_scriptType_auto'),
-            content: scriptText,
-            style: style,
-            duration: '',
-            notes: notes,
-            numberOfScenes: numberOfScenes,
+
+    const handleGenerateImage = async (index: number, frameType: 'start' | 'end') => {
+        const scene = scenes[index];
+        const frame = frameType === 'start' ? scene.startFrame : scene.endFrame;
+
+        const setFrameStatus = (status: any, data: any = {}) => {
+            const updatedScenes = [...scenes];
+            const targetFrame = frameType === 'start' ? updatedScenes[index].startFrame : updatedScenes[index].endFrame;
+            updatedScenes[index] = {
+                ...updatedScenes[index],
+                [frameType === 'start' ? 'startFrame' : 'endFrame']: { ...targetFrame, status, ...data }
+            };
+            updateScenesAndHistory(updatedScenes);
         };
 
+        setFrameStatus('pending');
+
         try {
-            const finalScenario = await developScenesFromSummary(summaryForDevelopment, storyboardLanguage, scriptType);
-            
-            if (numberOfScenes === 1 && finalScenario.scenes.length > 0) {
-                const newScenes = [mapServiceSceneToState(finalScenario.scenes[0])];
-                updateScenesAndHistory(newScenes);
-                await handleGenerateVideoPromptForScene(0, 'json', newScenes);
+            let inputImage: string | undefined;
+            if (frame.imageSource === 'reference') {
+                inputImage = referenceImages[0];
+            } else if (frame.imageSource.startsWith('data:image')) {
+                inputImage = frame.imageSource;
             } else {
-                updateScenesAndHistory(finalScenario.scenes.map(mapServiceSceneToState));
-            }
-            
-            setScriptSummary(summaryForDevelopment);
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : t('storyboarding_error_develop');
-            setError(errorMessage);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleInitialScriptGeneration = () => {
-        updateScenesAndHistory([]);
-        handleGenerateScriptSummary();
-    };
-    
-    const handleGenerateImage = async (sceneIndex: number, frameType: 'start' | 'end') => {
-        const sceneToGenerate = scenesRef.current[sceneIndex];
-        const frameToGenerate = frameType === 'start' ? sceneToGenerate.startFrame : sceneToGenerate.endFrame;
-
-        if (!sceneToGenerate || !frameToGenerate) return;
-
-        setScenes(prev => prev.map((s, i) => {
-            if (i === sceneIndex) {
-                if (frameType === 'start') return { ...s, startFrame: { ...s.startFrame, status: 'pending', error: undefined } };
-                return { ...s, endFrame: { ...s.endFrame, status: 'pending', error: undefined } };
-            }
-            return s;
-        }));
-        
-        try {
-            let sourceImages: (string | undefined)[] = [];
-            const source = frameToGenerate.imageSource;
-
-            if (source === 'reference') {
-                sourceImages = referenceImages;
-            } else if (source.startsWith('data:image')) {
-                sourceImages = [source];
-            } else {
-                const [sourceSceneIndexStr, sourceFrameType] = source.split('-');
-                const sourceSceneIndex = parseInt(sourceSceneIndexStr, 10);
-                if (!isNaN(sourceSceneIndex) && scenesRef.current[sourceSceneIndex]) {
-                    const sourceScene = scenesRef.current[sourceSceneIndex];
-                    if (sourceFrameType === 'start' && sourceScene.startFrame.imageUrl) {
-                        sourceImages = [sourceScene.startFrame.imageUrl];
-                    } else if (sourceFrameType === 'end' && sourceScene.endFrame.imageUrl) {
-                        sourceImages = [sourceScene.endFrame.imageUrl];
-                    } else {
-                        sourceImages = referenceImages; // Fallback
-                    }
-                } else {
-                    sourceImages = referenceImages; // Fallback
-                }
-            }
-            
-            let finalPrompt = frameToGenerate.description;
-
-            if (style && style.trim() !== '') {
-                const styleInstruction = language === 'vi' 
-                    ? `\n\n**Phong cách (Style):** ${style}`
-                    : `\n\n**Style:** ${style}`;
-                finalPrompt += styleInstruction;
+                const [sourceIndexStr, sourceFrameType] = frame.imageSource.split('-');
+                const sourceIndex = parseInt(sourceIndexStr, 10);
+                const sourceScene = scenes[sourceIndex];
+                inputImage = sourceFrameType === 'start' ? sourceScene.startFrame.imageUrl : sourceScene.endFrame.imageUrl;
             }
 
-            if (keepClothing) {
-                finalPrompt += '\n\n**Yêu cầu quan trọng (Important requirement):** Giữ nguyên trang phục của nhân vật từ ảnh nguồn (Keep the character\'s clothing from the source image).';
-            }
-            if (keepBackground) {
-                finalPrompt += '\n\n**Yêu cầu quan trọng (Important requirement):** Giữ nguyên bối cảnh/phông nền từ ảnh nguồn (Keep the background/scenery from the source image).';
-            }
-
-            const results = await generateFreeImage(
-                finalPrompt, 
-                1, 
-                aspectRatio, 
-                sourceImages[0],
-                sourceImages[1],
-                sourceImages[2],
-                sourceImages[3],
-                true
+            const resultUrls = await generateFreeImage(
+                frame.description, 1, aspectRatio, inputImage, undefined, undefined, undefined, false
             );
-            if (results.length > 0) {
-                setScenes(prev => prev.map((s, i) => {
-                    if (i === sceneIndex) {
-                        if (frameType === 'start') return { ...s, startFrame: { ...s.startFrame, status: 'done', imageUrl: results[0] } };
-                        return { ...s, endFrame: { ...s.endFrame, status: 'done', imageUrl: results[0] } };
-                    }
-                    return s;
-                }));
-                addImagesToGallery(results);
+
+            if (resultUrls.length > 0) {
+                setFrameStatus('done', { imageUrl: resultUrls[0] });
+                addImagesToGallery([resultUrls[0]]);
             } else {
                 throw new Error(t('storyboarding_error_noImage'));
             }
         } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : t('storyboarding_error_imageGen');
-            setScenes(prev => prev.map((s, i) => {
-                if (i === sceneIndex) {
-                    if (frameType === 'start') return { ...s, startFrame: { ...s.startFrame, status: 'error', error: errorMessage } };
-                    return { ...s, endFrame: { ...s.endFrame, status: 'error', error: errorMessage } };
-                }
-                return s;
-            }));
+            const errorMessage = err instanceof Error ? err.message : "Error";
+            setFrameStatus('error', { error: errorMessage });
         }
     };
-    
-    const handleGenerateVideo = useCallback(async (sceneIndex: number) => {
-        const sceneToGenerate = scenesRef.current[sceneIndex];
-        if (!sceneToGenerate) return;
 
-        let videoPrompt = '';
-        let inputImage: { mimeType: string; data: string } | undefined = undefined;
-
-        const startImgUrl = sceneToGenerate.startFrame.imageUrl;
-        const endImgUrl = sceneToGenerate.endFrame.imageUrl;
-
-        if (startImgUrl || endImgUrl) {
-            videoPrompt = sceneToGenerate.animationDescription;
-            inputImage = parseDataUrlForComponent(startImgUrl || endImgUrl!);
-        } else {
-            videoPrompt = `Start frame: ${sceneToGenerate.startFrame.description}. Animation: ${sceneToGenerate.animationDescription}. End frame: ${sceneToGenerate.endFrame.description}`;
-        }
-
-        if (!videoPrompt.trim()) {
-            toast.error("Vui lòng nhập mô tả cho các khung hình hoặc chuyển động.");
-            return;
-        }
-
-        setScenes(prev => prev.map((s, i) => i === sceneIndex ? { ...s, videoStatus: 'pending', videoError: undefined, videoOperation: undefined } : s));
+    const handleGenerateVideoPrompt = async (index: number, promptMode: 'auto' | 'start-end' | 'json') => {
+        const scene = scenes[index];
+        if (!scene.startFrame.description || !scene.animationDescription || !scene.endFrame.description) return;
         
         try {
-            const operation = await startVideoGeneration(videoPrompt, inputImage);
-            setScenes(prev => prev.map((s, i) => i === sceneIndex ? { ...s, videoOperation: operation } : s));
+            const videoPrompt = await generateVideoPromptFromScenes(
+                scene.startFrame.description,
+                scene.animationDescription,
+                scene.endFrame.description,
+                storyboardLanguage,
+                promptMode,
+                scriptType
+            );
+            const updatedScenes = [...scenes];
+            updatedScenes[index] = { ...updatedScenes[index], videoPrompt };
+            updateScenesAndHistory(updatedScenes);
+            toast.success("Video prompt đã được tạo.");
         } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
-            setScenes(prev => prev.map((s, i) => i === sceneIndex ? { ...s, videoStatus: 'error', videoError: errorMessage } : s));
-        }
-    }, [t]);
-
-    useEffect(() => {
-        const scenesToPoll = scenes.filter(scene => scene.videoStatus === 'pending' && scene.videoOperation);
-        if (scenesToPoll.length === 0) return;
-
-        let isCancelled = false;
-
-        const poll = async () => {
-            if (isCancelled) return;
-
-            let tasksUpdated = false;
-            const newScenes = [...scenesRef.current];
-
-            await Promise.all(scenesToPoll.map(async (scene) => {
-                const sceneIndex = scene.scene - 1;
-                if (!scene.videoOperation || sceneIndex < 0 || sceneIndex >= newScenes.length) return;
-
-                try {
-                    const updatedOp = await pollVideoOperation(scene.videoOperation);
-                    if (isCancelled) return;
-
-                    if (updatedOp.done) {
-                        if (updatedOp.response?.generatedVideos?.[0]?.video?.uri) {
-                            const downloadLink = updatedOp.response.generatedVideos[0].video.uri;
-                            const response = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
-                            if (!response.ok) throw new Error(`Failed to fetch video: ${response.statusText}`);
-                            const blob = await response.blob();
-                            const blobUrl = URL.createObjectURL(blob);
-                            
-                            newScenes[sceneIndex] = { ...newScenes[sceneIndex], videoStatus: 'done', videoUrl: blobUrl, videoOperation: undefined };
-                            addImagesToGallery([blobUrl]);
-                        } else {
-                            throw new Error(updatedOp.error?.message || "Video generation finished but no URI was found.");
-                        }
-                    } else {
-                        newScenes[sceneIndex] = { ...newScenes[sceneIndex], videoOperation: updatedOp };
-                    }
-                    tasksUpdated = true;
-                } catch (err) {
-                    const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
-                    newScenes[sceneIndex] = { ...newScenes[sceneIndex], videoStatus: 'error', videoError: errorMessage, videoOperation: undefined };
-                    tasksUpdated = true;
-                }
-            }));
-
-            if (!isCancelled && tasksUpdated) {
-                setScenes(newScenes);
-            }
-
-            const stillPending = newScenes.some(s => s.videoStatus === 'pending' && s.videoOperation);
-            if (!isCancelled && stillPending) {
-                setTimeout(poll, 10000);
-            }
-        };
-
-        const timeoutId = setTimeout(poll, 5000);
-
-        return () => {
-            isCancelled = true;
-            clearTimeout(timeoutId);
-        };
-    }, [scenes, addImagesToGallery]);
-
-    const handleGenerateAll = async () => {
-        for (let i = 0; i < scenesRef.current.length; i++) {
-            const scene = scenesRef.current[i];
-            if (scene.startFrame.status !== 'done' && scene.startFrame.status !== 'pending') {
-                await handleGenerateImage(i, 'start');
-            }
-             if (scene.endFrame.status !== 'done' && scene.endFrame.status !== 'pending') {
-                await handleGenerateImage(i, 'end');
-            }
+            const errorMessage = err instanceof Error ? err.message : "Error";
+            toast.error(`Failed to generate video prompt: ${errorMessage}`);
         }
     };
 
-    const handleDownloadAll = async () => {
-        const imagesToDownload: ImageForZip[] = scenes.flatMap((scene, index) => {
-            const sceneImages: ImageForZip[] = [];
-            if (scene.startFrame.imageUrl) {
-                sceneImages.push({ url: scene.startFrame.imageUrl, filename: `scene-${scene.scene}-start`, folder: 'storyboard' });
-            }
-            if (scene.endFrame.imageUrl) {
-                sceneImages.push({ url: scene.endFrame.imageUrl, filename: `scene-${scene.scene}-end`, folder: 'storyboard' });
-            }
-            return sceneImages;
-        });
-    
-        if (imagesToDownload.length === 0) {
-            toast.error(t('storyboarding_error_noImagesToDownload'));
+    const handleGenerateVideo = async (index: number) => {
+        const scene = scenes[index];
+        if (!scene.startFrame.imageUrl || !scene.videoPrompt) {
+            toast.error(t('storyboarding_error_videoInputs'));
             return;
         }
-        
-        await downloadAllImagesAsZip(imagesToDownload, 'storyboard.zip');
-    };
-    
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'text' | 'audio') => {
-        const file = e.target.files?.[0];
-        if (!file) return;
 
-        if (type === 'text') {
-            const reader = new FileReader();
-            reader.onload = (event) => setScriptText(event.target?.result as string);
-            reader.readAsText(file);
-        } else if (type === 'audio') {
-            setAudioFile(file);
-        }
-        e.target.value = '';
-    };
-    
-    const handleRefDragOver = (e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); e.stopPropagation(); setIsDraggingRef(true); };
-    const handleRefDragLeave = (e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); e.stopPropagation(); setIsDraggingRef(false); };
-    const handleRefDrop = (e: React.DragEvent<HTMLDivElement>) => {
-        e.preventDefault(); e.stopPropagation(); setIsDraggingRef(false);
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
-            const remainingSlots = 4 - referenceImages.length;
-            const filesToAdd = files.slice(0, remainingSlots);
-            filesToAdd.forEach(file => {
-                const reader = new FileReader();
-                reader.onloadend = () => { setReferenceImages(prev => [...prev, reader.result as string]); };
-                reader.readAsDataURL(file);
-            });
-        }
-    };
+        const setVideoStatus = (status: any, data: any = {}) => {
+            const updatedScenes = [...scenes];
+            updatedScenes[index] = { ...updatedScenes[index], videoStatus: status, ...data };
+            updateScenesAndHistory(updatedScenes);
+        };
 
-    const handleGallerySelect = (imageUrl: string) => {
-        if (pickingCustomImageFor !== null) {
-            handleImageSourceChange(pickingCustomImageFor.index, pickingCustomImageFor.frameType, imageUrl);
-        } else if (referenceImages.length < 4) {
-            setReferenceImages(prev => [...prev, imageUrl]);
-        }
-        setIsGalleryPickerOpen(false);
-        setPickingCustomImageFor(null);
-    };
+        setVideoStatus('pending');
 
-    const handleSummaryChange = useCallback((field: keyof ScriptSummary, value: string) => {
-        setScriptSummary(prev => prev ? { ...prev, [field]: value } : null);
-    }, []);
+        try {
+            const image = parseDataUrlForComponent(scene.startFrame.imageUrl);
+            let operation = await startVideoGeneration(scene.videoPrompt, image);
 
-    const handleEditSceneDescription = (index: number, frameType: 'start' | 'end', newDescription: string) => {
-        setScenes(prev => prev.map((s, i) => {
-            if (i === index) {
-                return frameType === 'start'
-                    ? { ...s, startFrame: { ...s.startFrame, description: newDescription } }
-                    : { ...s, endFrame: { ...s.endFrame, description: newDescription } };
+            while (!operation.done) {
+                await new Promise(resolve => setTimeout(resolve, 10000));
+                operation = await pollVideoOperation(operation);
             }
-            return s;
-        }));
-    };
-    
-    const handleEditSceneAnimation = (index: number, newAnimation: string) => {
-        setScenes(prev => prev.map((s, i) => i === index ? { ...s, animationDescription: newAnimation } : s));
-    };
 
-    const handleImageSourceChange = (sceneIndex: number, frameType: 'start' | 'end', newSource: string) => {
-        setScenes(prev => prev.map((s, i) => {
-            if (i === sceneIndex) {
-                 return frameType === 'start'
-                    ? { ...s, startFrame: { ...s.startFrame, imageSource: newSource, imageUrl: newSource.startsWith('data:image') ? newSource : s.startFrame.imageUrl } }
-                    : { ...s, endFrame: { ...s.endFrame, imageSource: newSource, imageUrl: newSource.startsWith('data:image') ? newSource : s.endFrame.imageUrl } };
+            if (operation.response?.generatedVideos?.[0]?.video?.uri) {
+                const downloadLink = operation.response.generatedVideos[0].video.uri;
+                const response = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
+                if (!response.ok) throw new Error(`Failed to fetch video: ${response.statusText}`);
+                const blob = await response.blob();
+                const blobUrl = URL.createObjectURL(blob);
+                setVideoStatus('done', { videoUrl: blobUrl });
+                addImagesToGallery([blobUrl]);
+            } else {
+                throw new Error(operation.error?.message || "Generation failed.");
             }
-            return s;
-        }));
-    };
-    
-    const handleClearImageForScene = useCallback((sceneIndex: number, frameType: 'start' | 'end') => {
-        setScenes(prev => prev.map((s, i) => {
-            if (i === sceneIndex) {
-                const updatedFrame = {
-                    ... (frameType === 'start' ? s.startFrame : s.endFrame),
-                    status: 'idle' as const,
-                    imageUrl: undefined,
-                    imageSource: 'reference', // Reset to default source
-                    error: undefined
-                };
-                return frameType === 'start'
-                    ? { ...s, startFrame: updatedFrame }
-                    : { ...s, endFrame: updatedFrame };
-            }
-            return s;
-        }));
-    }, []);
-
-    const handleSelectCustomImage = (sceneIndex: number, frameType: 'start' | 'end') => {
-        setPickingCustomImageFor({ index: sceneIndex, frameType });
-        setIsGalleryPickerOpen(true);
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : "Error";
+            setVideoStatus('error', { videoError: errorMessage });
+        }
     };
 
     const handleEditImage = (index: number, frameType: 'start' | 'end') => {
         const scene = scenes[index];
-        if (!scene) return;
         const frame = frameType === 'start' ? scene.startFrame : scene.endFrame;
+        if (!frame.imageUrl) return;
 
-        if (frame && frame.imageUrl) {
-            openImageEditor(frame.imageUrl, (newUrl) => {
-                 setScenes(prev => prev.map((s, i) => {
-                    if (i === index) {
-                         const updatedFrame = { ...frame, imageUrl: newUrl, imageSource: newUrl };
-                         return frameType === 'start'
-                            ? { ...s, startFrame: updatedFrame }
-                            : { ...s, endFrame: updatedFrame };
-                    }
-                    return s;
-                }));
-                addImagesToGallery([newUrl]);
-            });
-        }
+        openImageEditor(frame.imageUrl, (newUrl) => {
+            const updatedScenes = [...scenes];
+            if (frameType === 'start') {
+                updatedScenes[index].startFrame.imageUrl = newUrl;
+            } else {
+                updatedScenes[index].endFrame.imageUrl = newUrl;
+            }
+            updateScenesAndHistory(updatedScenes);
+            addImagesToGallery([newUrl]);
+        });
     };
 
     const handlePreviewImage = (index: number, frameType: 'start' | 'end') => {
         const scene = scenes[index];
-        if (!scene) return;
-        const frame = frameType === 'start' ? scene.startFrame : scene.endFrame;
-        
-        if (frame && frame.imageUrl) {
-            const globalIndex = imageGallery.indexOf(frame.imageUrl);
-            if (globalIndex !== -1) {
-                openLightbox(globalIndex);
-            }
+        const url = frameType === 'start' ? scene.startFrame.imageUrl : scene.endFrame.imageUrl;
+        if (url) {
+            openLightbox(lightboxImages.indexOf(url));
         }
     };
 
     const handleDownloadImage = (index: number, frameType: 'start' | 'end') => {
         const scene = scenes[index];
-        if (!scene) return;
-        const frame = frameType === 'start' ? scene.startFrame : scene.endFrame;
-        
-        if (frame && frame.imageUrl) {
-            downloadImage(frame.imageUrl, `storyboard-scene-${scene.scene}-${frameType}`);
+        const url = frameType === 'start' ? scene.startFrame.imageUrl : scene.endFrame.imageUrl;
+        if (url) {
+            downloadImage(url, `scene-${scene.scene}-${frameType}-frame`);
         }
     };
 
-    const handleAddScene = useCallback(() => {
-        const newSceneNumber = scenes.length > 0 ? Math.max(...scenes.map(s => s.scene)) + 1 : 1;
-        const newScene: SceneState = {
-            scene: newSceneNumber,
-            startFrame: {
-                description: t('storyboarding_startFrame_placeholder', newSceneNumber),
-                status: 'idle',
-                imageSource: 'reference',
-            },
-            animationDescription: '',
-            endFrame: {
-                description: t('storyboarding_endFrame_placeholder', newSceneNumber),
-                status: 'idle',
-                imageSource: 'reference',
-            },
-        };
-        updateScenesAndHistory([...scenes, newScene]);
-    }, [scenes, t, updateScenesAndHistory]);
-
-    const handleEditSceneVideoPrompt = (index: number, newPrompt: string) => {
-        setScenes(prev => prev.map((s, i) => i === index ? { ...s, videoPrompt: newPrompt } : s));
-    };
-
-    const handleGenerateVideoPromptForScene = async (sceneIndex: number, promptMode: 'auto' | 'start-end' | 'json', scenesToUse: SceneState[] = scenesRef.current) => {
-        const sceneToProcess = scenesToUse[sceneIndex];
-        if (!sceneToProcess) return;
-
-        try {
-            const result = await generateVideoPromptFromScenes(
-                sceneToProcess.startFrame.description,
-                sceneToProcess.animationDescription,
-                sceneToProcess.endFrame.description,
-                storyboardLanguage,
-                promptMode,
-                scriptType
-            );
-            setScenes(prev => prev.map((s, i) => i === sceneIndex ? { ...s, videoPrompt: result } : s));
-
-        } catch (err) {
-            console.error("Error generating video prompt in modal:", err);
-            throw err;
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'text' | 'audio') => {
+        const file = e.target.files?.[0];
+        if (file) {
+            if (type === 'text') {
+                const reader = new FileReader();
+                reader.onload = (re) => setScriptText(re.target?.result as string);
+                reader.readAsText(file);
+            } else {
+                setAudioFile(file);
+            }
         }
     };
     
-    const handleRegenerateScenePrompt = async (index: number, frameType: 'start' | 'end', modificationPrompt: string) => {
-        const originalScene = scenes[index];
-        if (!originalScene) return;
-        const originalFrame = frameType === 'start' ? originalScene.startFrame : originalScene.endFrame;
-
-        setIsLoading(true);
-        setLoadingMessage(`Đang viết lại prompt cho Cảnh ${originalScene.scene}...`);
-        setError(null);
-
-        try {
-            const newDescription = await refineSceneDescription(originalFrame.description, modificationPrompt, storyboardLanguage);
-            handleEditSceneDescription(index, frameType, newDescription);
-            toast.success(`Đã tạo lại prompt cho Cảnh ${originalScene.scene}.`);
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : "Không thể tạo lại prompt.";
-            setError(errorMessage);
-            toast.error(errorMessage);
-        } finally {
-            setIsLoading(false);
+    const handleRefDragOver = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setIsDraggingRef(true); };
+    const handleRefDragLeave = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setIsDraggingRef(false); };
+    const handleRefDrop = (e: React.DragEvent) => {
+        e.preventDefault(); e.stopPropagation(); setIsDraggingRef(false);
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            // FIX: Explicitly cast files for filter and map operations.
+            const files = Array.from(e.dataTransfer.files as any).filter((f: any) => f.type.startsWith('image/')) as File[];
+            if (files.length > 0) {
+                 const readFile = (file: File): Promise<string> => new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result as string);
+                    reader.readAsDataURL(file);
+                });
+                Promise.all(files.map(readFile)).then(urls => setReferenceImages(prev => [...prev, ...urls].slice(0, 4)));
+            }
         }
     };
 
-    const handleRegenerateSceneTransition = async (index: number, modificationPrompt: string) => {
-        const originalScene = scenes[index];
-        if (!originalScene || originalScene.animationDescription === undefined) return;
+    const handleGallerySelect = (url: string) => {
+        if (pickingCustomImageFor) {
+            const { index, frameType } = pickingCustomImageFor;
+            const updatedScenes = [...scenes];
+            if (frameType === 'start') {
+                updatedScenes[index].startFrame = { ...updatedScenes[index].startFrame, imageSource: url, imageUrl: url, status: 'done' };
+            } else {
+                updatedScenes[index].endFrame = { ...updatedScenes[index].endFrame, imageSource: url, imageUrl: url, status: 'done' };
+            }
+            updateScenesAndHistory(updatedScenes);
+            setPickingCustomImageFor(null);
+        } else {
+            setReferenceImages(prev => [...prev, url].slice(0, 4));
+        }
+        setIsGalleryPickerOpen(false);
+    };
 
-        setIsLoading(true);
-        setLoadingMessage(`Đang viết lại chuyển động cho Cảnh ${originalScene.scene}...`);
-        setError(null);
-
-        try {
-            const newTransition = await refineSceneTransition(originalScene.animationDescription, modificationPrompt, storyboardLanguage);
-            handleEditSceneAnimation(index, newTransition);
-            toast.success(`Đã tạo lại chuyển động cho Cảnh ${originalScene.scene}.`);
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : "Không thể tạo lại chuyển động.";
-            setError(errorMessage);
-            toast.error(errorMessage);
-        } finally {
-            setIsLoading(false);
+    const handleSummaryChange = (field: keyof ScriptSummary, value: string) => {
+        if (scriptSummary) {
+            setScriptSummary({ ...scriptSummary, [field]: value });
         }
     };
 
-    const handleExport = async () => {
-        if (scenes.length === 0 && !scriptSummary) {
+    const handleAddScene = () => {
+        const newSceneNum = scenes.length > 0 ? Math.max(...scenes.map(s => s.scene)) + 1 : 1;
+        const newScene: SceneState = {
+            scene: newSceneNum,
+            animationDescription: '',
+            startFrame: { description: '', status: 'idle', imageSource: 'reference' },
+            endFrame: { description: '', status: 'idle', imageSource: 'reference' }
+        };
+        updateScenesAndHistory([...scenes, newScene]);
+    };
+
+    const handleDeleteScene = (index: number) => {
+        const updatedScenes = scenes.filter((_, i) => i !== index).map((s, i) => ({ ...s, scene: i + 1 }));
+        updateScenesAndHistory(updatedScenes);
+    };
+
+    const handleMoveScene = (index: number, direction: 'up' | 'down') => {
+        const newIndex = direction === 'up' ? index - 1 : index + 1;
+        if (newIndex < 0 || newIndex >= scenes.length) return;
+        const updatedScenes = [...scenes];
+        [updatedScenes[index], updatedScenes[newIndex]] = [updatedScenes[newIndex], updatedScenes[index]];
+        // Re-number scenes to match index
+        const renumberedScenes = updatedScenes.map((s, i) => ({ ...s, scene: i + 1 }));
+        updateScenesAndHistory(renumberedScenes);
+    };
+
+    const handleExport = () => {
+        if (scenes.length === 0) {
             toast.error(t('storyboarding_export_disabled'));
             return;
         }
-    
-        const exportState = {
-            version: 'storyboard-v1',
-            activeInput,
-            idea,
-            scriptText,
-            audioData,
-            referenceImages,
-            style,
-            numberOfScenes,
-            aspectRatio,
-            notes,
-            storyboardLanguage,
-            scriptType,
-            keepClothing,
-            keepBackground,
-            scriptSummary,
-            scenes,
+        const stateToExport = {
+            version: '2.0',
+            activeInput, idea, scriptText,
+            referenceImages, scriptSummary, scenes,
+            style, numberOfScenes, aspectRatio, notes, storyboardLanguage, scriptType, keepClothing, keepBackground
         };
-    
-        downloadJson(exportState, `storyboard-session-${Date.now()}.json`);
+        downloadJson(stateToExport, `PDT-AI-storyboard-${Date.now()}.json`);
     };
 
-    const processImportFile = (file: File) => {
-        if (!file || file.type !== 'application/json') {
-            toast.error(t('storyboarding_import_error'));
-            return;
-        }
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            try {
-                const result = event.target?.result as string;
-                const importedState = JSON.parse(result);
-
-                if (importedState.version !== 'storyboard-v1' || !Array.isArray(importedState.scenes)) {
-                    throw new Error(t('storyboarding_import_error'));
-                }
-
-                resetState(); 
-                setActiveInput(importedState.activeInput || 'prompt');
-                setIdea(importedState.idea || '');
-                setScriptText(importedState.scriptText || '');
-                
-                if (importedState.audioData) {
-                    const newAudioFile = dataURLtoFile(importedState.audioData.dataUrl, importedState.audioData.name, importedState.audioData.type);
-                    setAudioFile(newAudioFile);
-                } else {
-                    setAudioFile(null);
-                }
-
-                setReferenceImages(importedState.referenceImages || []);
-                setStyle(importedState.style || '');
-                setNumberOfScenes(importedState.numberOfScenes ?? 0);
-                setAspectRatio(importedState.aspectRatio || aspectRatioOptions[0]);
-                setNotes(importedState.notes || '');
-                setStoryboardLanguage(importedState.storyboardLanguage || 'vi');
-                setScriptType(importedState.scriptType || 'auto');
-                setKeepClothing(importedState.keepClothing || false);
-                setKeepBackground(importedState.keepBackground || false);
-                setScriptSummary(importedState.scriptSummary || null);
-                
-                const importedScenes = importedState.scenes || [];
-                setScenes(importedScenes);
-                setHistory([importedScenes]);
-                setHistoryIndex(0);
-                
-                toast.success(t('storyboarding_import_success'));
-
-            } catch (err) {
-                toast.error(err instanceof Error ? err.message : t('storyboarding_import_error'));
-                console.error("Failed to import storyboard:", err);
-            }
-        };
-        reader.readAsText(file);
-    };
-
-    const handleFileSelectedForImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            processImportFile(file);
+            const reader = new FileReader();
+            reader.onload = (re) => {
+                try {
+                    const data = JSON.parse(re.target?.result as string);
+                    if (data.scenes) {
+                        setActiveInput(data.activeInput || 'prompt');
+                        setIdea(data.idea || '');
+                        setScriptText(data.scriptText || '');
+                        setReferenceImages(data.referenceImages || []);
+                        setScriptSummary(data.scriptSummary || null);
+                        setScenes(data.scenes);
+                        setHistory([data.scenes]);
+                        setHistoryIndex(0);
+                        setStyle(data.style || '');
+                        setNumberOfScenes(data.numberOfScenes ?? 0);
+                        setAspectRatio(data.aspectRatio || aspectRatioOptions[0]);
+                        setNotes(data.notes || '');
+                        setStoryboardLanguage(data.storyboardLanguage || 'vi');
+                        setScriptType(data.scriptType || 'auto');
+                        setKeepClothing(data.keepClothing || false);
+                        setKeepBackground(data.keepBackground || false);
+                        toast.success(t('storyboarding_import_success'));
+                    }
+                } catch (err) {
+                    toast.error(t('storyboarding_import_error'));
+                }
+            };
+            reader.readAsText(file);
         }
         e.target.value = '';
     };
-
-    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-            if (e.dataTransfer.items[0].kind === 'file' && e.dataTransfer.items[0].type === 'application/json') {
-                setIsDraggingOver(true);
-            }
-        }
-    };
-
-    const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDraggingOver(false);
-    };
-
-    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDraggingOver(false);
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            processImportFile(e.dataTransfer.files[0]);
-        }
-    };
-
-    const handleDeleteScene = useCallback((indexToDelete: number) => {
-        const newScenes = scenes.filter((_, index) => index !== indexToDelete)
-                              .map((scene, index) => ({ ...scene, scene: index + 1 }));
-        updateScenesAndHistory(newScenes);
-    }, [scenes, updateScenesAndHistory]);
     
-    const handleMoveScene = useCallback((indexToMove: number, direction: 'up' | 'down') => {
-        if ((direction === 'up' && indexToMove === 0) || (direction === 'down' && indexToMove === scenes.length - 1)) {
+    const handleDownloadImages = () => {
+        const imagesToZip: ImageForZip[] = [];
+        scenes.forEach(scene => {
+            if (scene.startFrame.imageUrl) imagesToZip.push({ url: scene.startFrame.imageUrl, filename: `scene-${scene.scene}-start`, folder: `scene-${scene.scene}` });
+            if (scene.endFrame.imageUrl) imagesToZip.push({ url: scene.endFrame.imageUrl, filename: `scene-${scene.scene}-end`, folder: `scene-${scene.scene}` });
+            if (scene.videoUrl) imagesToZip.push({ url: scene.videoUrl, filename: `scene-${scene.scene}-video`, folder: `scene-${scene.scene}`, extension: 'mp4' });
+        });
+
+        if (imagesToZip.length === 0) {
+            toast.error(t('storyboarding_error_noImagesToDownload'));
             return;
         }
 
-        const newScenes = [...scenes];
-        const targetIndex = direction === 'up' ? indexToMove - 1 : indexToMove + 1;
-        
-        const sceneNum1 = newScenes[indexToMove].scene;
-        const sceneNum2 = newScenes[targetIndex].scene;
-        newScenes[indexToMove].scene = sceneNum2;
-        newScenes[targetIndex].scene = sceneNum1;
-        
-        [newScenes[indexToMove], newScenes[targetIndex]] = [newScenes[targetIndex], newScenes[indexToMove]];
-        
-        updateScenesAndHistory(newScenes);
-    }, [scenes, updateScenesAndHistory]);
-
-    const handleCustomImageFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file && uploadingImageFor) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const newUrl = reader.result as string;
-                handleImageSourceChange(uploadingImageFor.index, uploadingImageFor.frameType, newUrl);
-                addImagesToGallery([newUrl]);
-            };
-            reader.readAsDataURL(file);
-        }
-        if(e.target) e.target.value = '';
-        setUploadingImageFor(null);
+        downloadAllImagesAsZip(imagesToZip, `storyboard-assets-${Date.now()}.zip`);
     };
-    
-    const handleImageFileForScene = useCallback((file: File, sceneIndex: number, frameType: 'start' | 'end') => {
-        if (!file || !file.type.startsWith('image/')) return;
+
+    const handleRegenerateScenePrompt = async (index: number, frameType: 'start' | 'end', modificationPrompt: string) => {
+        const frame = frameType === 'start' ? scenes[index].startFrame : scenes[index].endFrame;
+        setIsLoading(true);
+        setLoadingMessage('Đang tinh chỉnh prompt...');
+        try {
+            const refinedDescription = await refineSceneDescription(frame.description, modificationPrompt, storyboardLanguage);
+            const updatedScenes = [...scenes];
+            if (frameType === 'start') {
+                updatedScenes[index].startFrame.description = refinedDescription;
+            } else {
+                updatedScenes[index].endFrame.description = refinedDescription;
+            }
+            updateScenesAndHistory(updatedScenes);
+            toast.success("Prompt đã được tinh chỉnh.");
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : "Error";
+            toast.error(`Failed to refine prompt: ${errorMessage}`);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleRegenerateAnimation = async (index: number, modificationPrompt: string) => {
+        const scene = scenes[index];
+        setIsLoading(true);
+        setLoadingMessage('Đang tinh chỉnh chuyển động...');
+        try {
+            const refinedAnimation = await refineSceneTransition(scene.animationDescription, modificationPrompt, storyboardLanguage);
+            const updatedScenes = [...scenes];
+            updatedScenes[index].animationDescription = refinedAnimation;
+            updateScenesAndHistory(updatedScenes);
+            toast.success("Mô tả chuyển động đã được tinh chỉnh.");
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : "Error";
+            toast.error(`Failed to refine animation: ${errorMessage}`);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleImageFile = (file: File, index: number, frameType: 'start' | 'end') => {
         const reader = new FileReader();
         reader.onloadend = () => {
-            const newUrl = reader.result as string;
-            handleImageSourceChange(sceneIndex, frameType, newUrl);
-            addImagesToGallery([newUrl]);
+            const url = reader.result as string;
+            // FIX: Using scenesRef to avoid closure over stale state.
+            const updatedScenes = [...scenesRef.current];
+            if (frameType === 'start') {
+                updatedScenes[index].startFrame = { ...updatedScenes[index].startFrame, imageSource: url, imageUrl: url, status: 'done' };
+            } else {
+                updatedScenes[index].endFrame = { ...updatedScenes[index].endFrame, imageSource: url, imageUrl: url, status: 'done' };
+            }
+            updateScenesAndHistory(updatedScenes);
+            addImagesToGallery([url]);
         };
         reader.readAsDataURL(file);
-    }, [handleImageSourceChange, addImagesToGallery]);
-
-    const handleTriggerCustomImageUpload = (index: number, frameType: 'start' | 'end') => {
-        setUploadingImageFor({ index, frameType });
-        customImageUploadRef.current?.click();
     };
-    
-    const videoPlatforms = [
-        { name: 'Kling', url: 'https://app.klingai.com/global/image-to-video/frame-mode/new' },
-        { name: 'Veo', url: 'https://labs.google/fx/vi/tools/flow' },
-        { name: 'Higgsfield', url: 'https://higgsfield.ai/' },
-        { name: 'Dreamina', url: 'https://dreamina.capcut.com/ai-tool/home' },
-        { name: 'Sora', url: 'https://sora.chatgpt.com/explore' },
-        { name: 'Wan', url: 'https://wan.video/' },
-        { name: 'ComfyUI', url: 'https://colab.research.google.com/github/StableDiffusionVN/SDVN-WebUI/blob/main/SDVN_WebUI_v3.ipynb' },
-        { name: 'Runway', url: 'https://runwayml.com/' },
-        { name: 'Midjourney', url: 'https://www.midjourney.com/explore?tab=random' },
-    ];
 
     return ReactDOM.createPortal(
         <>
-            <AnimatePresence>
-                {isOpen && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onHide} className="modal-overlay z-[60]" aria-modal="true" role="dialog" >
-                        <motion.div
-                            initial={{ scale: 0.9, opacity: 0, y: 20 }}
-                            animate={{ scale: 1, opacity: 1, y: 0 }}
-                            exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                            onClick={(e) => e.stopPropagation()}
-                            className="modal-content !max-w-[95vw] !w-[95vw] !h-[95vh] flex flex-col !p-0 overflow-hidden relative"
-                            onDragOver={handleDragOver}
-                            onDragLeave={handleDragLeave}
-                            onDrop={handleDrop}
-                        >
-                            <input type="file" ref={customImageUploadRef} onChange={handleCustomImageFileSelect} className="hidden" accept="image/*" />
-                            <div className="flex-grow flex flex-row overflow-hidden">
-                                <aside className="w-1/3 max-w-sm flex flex-col bg-neutral-900/50 p-4 border-r border-white/10">
-                                    <div className="flex justify-between items-center mb-4 flex-shrink-0">
-                                        <h3 className="base-font font-bold text-xl text-yellow-400">{t('extraTools_storyboarding')}</h3>
-                                        <button onClick={onHide} className="p-2 rounded-full hover:bg-white/10" aria-label={t('common_cancel')}><CloseIcon className="h-5 w-5" /></button>
-                                    </div>
-                                    <div className="flex-grow flex flex-col overflow-y-auto space-y-4 pr-2 -mr-4">
-                                        <StoryboardingInput
-                                            activeInput={activeInput} setActiveInput={setActiveInput} idea={idea} setIdea={setIdea} scriptText={scriptText} setScriptText={setScriptText}
-                                            audioFile={audioFile} audioInputRef={audioInputRef} textInputRef={textInputRef} handleFileSelect={handleFileSelect}
-                                            referenceImages={referenceImages} isDraggingRef={isDraggingRef} handleRefDragOver={handleRefDragOver} handleRefDragLeave={handleRefDragLeave}
-                                            handleRefDrop={handleRefDrop} setReferenceImages={setReferenceImages} setIsGalleryPickerOpen={setIsGalleryPickerOpen}
-                                            style={displayStyleValue} setStyle={handleStyleChange} styleOptions={styleOptions}
-                                            numberOfScenes={numberOfScenes} setNumberOfScenes={setNumberOfScenes}
-                                            aspectRatio={aspectRatio} setAspectRatio={setAspectRatio} aspectRatioOptions={aspectRatioOptions}
-                                            notes={notes} setNotes={setNotes}
-                                            storyboardLanguage={storyboardLanguage}
-                                            setStoryboardLanguage={setStoryboardLanguage}
-                                            scriptType={scriptType}
-                                            setScriptType={setScriptType}
-                                            keepClothing={keepClothing}
-                                            setKeepClothing={setKeepClothing}
-                                            keepBackground={keepBackground}
-                                            setKeepBackground={setKeepBackground}
-                                        />
-                                        {scriptSummary && (
-                                            <StoryboardingSummary scriptSummary={scriptSummary} onSummaryChange={handleSummaryChange} />
-                                        )}
-                                    </div>
-                                    <div className="flex-shrink-0 pt-4 border-t border-white/10">
-                                        {(() => {
-                                            if (activeInput === 'text') {
-                                                if (scenes.length === 0) {
-                                                    return (
-                                                        <button onClick={handleDevelopFromText} className="btn btn-primary btn-sm w-full" disabled={isLoading || !scriptText.trim()}>
-                                                            {isLoading ? loadingMessage : t('storyboarding_developScenes')}
-                                                        </button>
-                                                    );
-                                                } else {
-                                                    return (
-                                                        <div className="flex items-center gap-2">
-                                                            <button onClick={() => { setScriptSummary(null); updateScenesAndHistory([]); }} className="btn btn-secondary btn-sm" disabled={isLoading}>
-                                                                {t('storyboarding_editInput')}
-                                                            </button>
-                                                            <button onClick={handleDevelopFromText} className="btn btn-primary btn-sm flex-grow" disabled={isLoading}>
-                                                                {isLoading ? loadingMessage : t('storyboarding_redevelopScenes')}
-                                                            </button>
-                                                        </div>
-                                                    );
-                                                }
-                                            }
-
-                                            if (!scriptSummary) {
-                                                return (
-                                                    <button onClick={handleInitialScriptGeneration} className="btn btn-primary btn-sm w-full" disabled={isLoading}>
-                                                        {isLoading ? loadingMessage : t('storyboarding_idea_submit')}
-                                                    </button>
-                                                );
-                                            }
-                                            if (scenes.length === 0) {
-                                                return (
-                                                    <div className="flex items-center gap-2">
-                                                        <button onClick={handleGenerateScriptSummary} className="btn btn-secondary btn-sm" disabled={isLoading}>
-                                                            {t('storyboarding_regenerateScript')}
-                                                        </button>
-                                                        <button onClick={handleDevelopScenesFromSummary} className="btn btn-primary btn-sm flex-grow" disabled={isLoading}>
-                                                            {isLoading && loadingMessage === t('storyboarding_developing_scenes') ? loadingMessage : t('storyboarding_developScenes')}
-                                                        </button>
-                                                    </div>
-                                                );
-                                            }
-                                            return (
-                                                <div className="flex items-center gap-2">
-                                                    <button onClick={handleGenerateScriptSummary} className="btn btn-secondary btn-sm" disabled={isLoading}>
-                                                        {t('storyboarding_regenerateScript')}
-                                                    </button>
-                                                    <button onClick={handleDevelopScenesFromSummary} className="btn btn-primary btn-sm flex-grow" disabled={isLoading}>
-                                                        {isLoading && loadingMessage === t('storyboarding_developing_scenes') ? loadingMessage : t('storyboarding_redevelopScenes')}
-                                                    </button>
-                                                </div>
-                                            );
-                                        })()}
-                                        {error && <p className="text-red-400 text-center text-sm mt-2">{error}</p>}
-                                    </div>
-                                </aside>
-
-                                <main className="flex-1 flex flex-col p-4 overflow-hidden bg-neutral-800/30">
-                                    <div className="flex-shrink-0 pb-4 mb-4 border-b border-white/10 flex items-center justify-end gap-2">
-                                        <input type="file" ref={importInputRef} onChange={handleFileSelectedForImport} accept=".json" className="hidden" />
-                                        <button onClick={() => importInputRef.current?.click()} className="btn btn-secondary btn-sm" disabled={isLoading}>
-                                            {t('storyboarding_import')}
-                                        </button>
-                                        <button onClick={handleExport} className="btn btn-secondary btn-sm" disabled={isLoading || (scenes.length === 0 && !scriptSummary)} title={(scenes.length === 0 && !scriptSummary) ? t('storyboarding_export_disabled') : ''}>
-                                            {t('storyboarding_export')}
-                                        </button>
-                                        <button onClick={handleNew} className="btn btn-secondary btn-sm" disabled={isLoading}>
-                                            {t('storyboarding_new')}
-                                        </button>
-                                        <button onClick={handleGenerateAll} className="btn btn-secondary btn-sm" disabled={isLoading || scenes.length === 0 || scenes.some(s => s.startFrame.status === 'pending' || s.endFrame.status === 'pending')}>
-                                            {t('storyboarding_generateAll')}
-                                        </button>
-                                        <button onClick={handleDownloadAll} className="btn btn-secondary btn-sm" disabled={isLoading || scenes.every(s => !s.startFrame.imageUrl && !s.endFrame.imageUrl)}>
-                                            {t('common_downloadAll')}
-                                        </button>
-                                        <div className="w-px h-5 bg-white/20 mx-1" />
-                                        <button onClick={handleUndo} className="btn-search" disabled={!canUndo} title={t('infoModal_appNav_items.undo')}>
-                                            <UndoIcon className="h-5 w-5" strokeWidth={2} />
-                                        </button>
-                                        <button onClick={handleRedo} className="btn-search" disabled={!canRedo} title={t('infoModal_appNav_items.redo')}>
-                                            <RedoIcon className="h-5 w-5" strokeWidth={2} />
-                                        </button>
-                                    </div>
-                                    <div className="flex-grow overflow-y-auto">
-                                        <StoryboardingScenes
-                                            scenes={scenes}
-                                            referenceImages={referenceImages}
-                                            onGenerateImage={handleGenerateImage}
-                                            onGenerateVideo={handleGenerateVideo}
-                                            onEditSceneDescription={handleEditSceneDescription}
-                                            onEditSceneAnimation={handleEditSceneAnimation}
-                                            onImageSourceChange={handleImageSourceChange}
-                                            onSelectCustomImage={handleSelectCustomImage}
-                                            onUploadCustomImage={handleTriggerCustomImageUpload}
-                                            onClearImage={handleClearImageForScene}
-                                            onImageFile={handleImageFileForScene}
-                                            onEditImage={handleEditImage}
-                                            onPreviewImage={handlePreviewImage}
-                                            onDownloadImage={handleDownloadImage}
-                                            onAddScene={handleAddScene}
-                                            onGenerateVideoPrompt={handleGenerateVideoPromptForScene}
-                                            onEditSceneVideoPrompt={handleEditSceneVideoPrompt}
-                                            onRegenerateScenePrompt={handleRegenerateScenePrompt}
-                                            onRegenerateAnimation={handleRegenerateSceneTransition}
-                                            aspectRatio={aspectRatio}
-                                            onDeleteScene={handleDeleteScene}
-                                            onMoveScene={handleMoveScene}
-                                        />
-                                    </div>
-                                </main>
+            <motion.div
+                className="modal-overlay z-[60]"
+                aria-modal="true"
+                role="dialog"
+                initial={false}
+                animate={isOpen ? "open" : "closed"}
+                variants={{
+                    open: { opacity: 1, pointerEvents: 'auto' },
+                    closed: { opacity: 0, pointerEvents: 'none' },
+                }}
+                transition={{ duration: 0.2 }}
+                onClick={onHide}
+            >
+                <motion.div
+                    className="modal-content !max-w-[98vw] !w-[98vw] !h-[95vh] flex flex-row !p-0 relative bg-neutral-900"
+                    onClick={(e) => e.stopPropagation()}
+                    initial={false}
+                    animate={isOpen ? "open" : "closed"}
+                    variants={{
+                        open: { opacity: 1, scale: 1, y: 0 },
+                        closed: { opacity: 0, scale: 0.95, y: 20 },
+                    }}
+                    transition={{ duration: 0.2 }}
+                >
+                    {/* Sidebar: Inputs & Summary */}
+                    <aside className="w-1/4 max-w-sm flex flex-col p-6 border-r border-white/10 bg-neutral-900/50">
+                        <div className="flex justify-between items-center mb-6 flex-shrink-0">
+                            <h3 className="base-font font-bold text-2xl text-yellow-400">Storyboard</h3>
+                            <div className="flex items-center gap-1">
+                                <button onClick={handleUndo} disabled={!canUndo} className="p-1.5 rounded-full hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed" title="Undo (Cmd+Z)">
+                                    <UndoIcon className="h-5 w-5" />
+                                </button>
+                                <button onClick={handleRedo} disabled={!canRedo} className="p-1.5 rounded-full hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed" title="Redo (Cmd+Shift+Z)">
+                                    <RedoIcon className="h-5 w-5" />
+                                </button>
+                                <button onClick={onHide} className="p-1.5 rounded-full hover:bg-white/10 transition-colors" aria-label="Close">
+                                    <CloseIcon className="h-6 w-6" />
+                                </button>
                             </div>
+                        </div>
 
-                            <div className="flex-shrink-0 border-t border-white/10 px-4 py-2 flex items-center justify-between bg-neutral-900/50">
-                                <p className="text-xs text-neutral-500 mr-4 flex-shrink-0">
-                                    {t('storyboarding_videoPlatforms_note')}
-                                </p>
-                                <div className="flex items-center gap-2 flex-wrap justify-end">
-                                    {videoPlatforms.map(platform => (
-                                        <a
-                                            key={platform.name}
-                                            href={platform.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="bg-neutral-800 text-neutral-300 text-xs px-3 py-1 rounded-md hover:bg-neutral-700 hover:text-white transition-colors"
-                                        >
-                                            {platform.name}
-                                        </a>
-                                    ))}
+                        <div className="flex-grow overflow-y-auto space-y-8 pr-2 -mr-4">
+                            <section>
+                                <StoryboardingInput
+                                    {...{ activeInput, setActiveInput, idea, setIdea, scriptText, setScriptText, audioFile, audioInputRef, textInputRef, handleFileSelect, referenceImages, isDraggingRef, handleRefDragOver, handleRefDragLeave, handleRefDrop, setReferenceImages, setIsGalleryPickerOpen, style, setStyle, styleOptions, numberOfScenes, setNumberOfScenes, aspectRatio, setAspectRatio, aspectRatioOptions, notes, setNotes, storyboardLanguage, setStoryboardLanguage, scriptType, setScriptType, keepClothing, setKeepClothing, keepBackground, setKeepBackground }}
+                                />
+                                <div className="mt-4 flex gap-2">
+                                    <button onClick={handleGenerateScriptSummary} className="btn btn-primary flex-grow text-xs !py-2" disabled={isLoading}>{isLoading ? loadingMessage : t('storyboarding_idea_submit')}</button>
+                                    <button onClick={handleNew} className="btn btn-secondary text-xs !py-2" title={t('storyboarding_new')}>{t('storyboarding_new')}</button>
                                 </div>
-                            </div>
+                            </section>
 
-                             <AnimatePresence>
-                                {isDraggingOver && (
-                                    <motion.div
-                                        className="absolute inset-0 z-50 bg-black/70 border-4 border-dashed border-yellow-400 rounded-lg flex flex-col items-center justify-center pointer-events-none"
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        exit={{ opacity: 0 }}
-                                    >
-                                        <CloudUploadIcon className="h-16 w-16 text-yellow-400 mb-4" strokeWidth={1} />
-                                        <p className="text-2xl font-bold text-yellow-400">{t('storyboarding_dropPrompt')}</p>
-                                    </motion.div>
+                            <AnimatePresence>
+                                {scriptSummary && (
+                                    <motion.section initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="pt-6 border-t border-white/10 space-y-4">
+                                        <div className="flex justify-between items-center">
+                                            <h4 className="font-bold text-neutral-200">Kịch bản</h4>
+                                            <button onClick={handleGenerateScriptSummary} className="text-xs text-yellow-400 hover:underline">{t('storyboarding_regenerateScript')}</button>
+                                        </div>
+                                        <StoryboardingSummary scriptSummary={scriptSummary} onSummaryChange={handleSummaryChange} />
+                                        <button onClick={handleDevelopScenes} className="btn btn-primary w-full text-xs !py-2" disabled={isLoading}>{t('storyboarding_developScenes')}</button>
+                                    </motion.section>
                                 )}
                             </AnimatePresence>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                        </div>
+                         
+                        <div className="flex-shrink-0 pt-6 border-t border-white/10 space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                                <button onClick={() => importInputRef.current?.click()} className="btn btn-secondary !text-[10px] !py-1.5 uppercase tracking-tight">{t('storyboarding_import')}</button>
+                                <button onClick={handleExport} className="btn btn-secondary !text-[10px] !py-1.5 uppercase tracking-tight" disabled={scenes.length === 0}>{t('storyboarding_export')}</button>
+                            </div>
+                            <button onClick={handleDownloadImages} className="btn btn-secondary w-full text-[10px] !py-1.5 uppercase tracking-tight" disabled={scenes.length === 0}>{t('common_downloadAll')}</button>
+                        </div>
+                    </aside>
+
+                    {/* Main Content: Scenes Grid */}
+                    <main className="flex-1 overflow-y-auto bg-neutral-900/30 p-8 custom-scrollbar relative">
+                        {scenes.length > 0 ? (
+                            <StoryboardingScenes
+                                scenes={scenes}
+                                referenceImages={referenceImages}
+                                onGenerateImage={handleGenerateImage}
+                                onGenerateVideo={handleGenerateVideo}
+                                onEditSceneDescription={handleEditSceneDescription}
+                                onEditSceneAnimation={handleEditSceneAnimation}
+                                onImageSourceChange={handleImageSourceChange}
+                                onSelectCustomImage={(idx, type) => { setPickingCustomImageFor({ index: idx, frameType: type }); setIsGalleryPickerOpen(true); }}
+                                onUploadCustomImage={(idx, type) => { setUploadingImageFor({ index: idx, frameType: type }); customImageUploadRef.current?.click(); }}
+                                onClearImage={handleClearImage}
+                                onImageFile={handleImageFile}
+                                onEditImage={handleEditImage}
+                                onPreviewImage={handlePreviewImage}
+                                onDownloadImage={handleDownloadImage}
+                                onAddScene={handleAddScene}
+                                onDeleteScene={handleDeleteScene}
+                                onMoveScene={handleMoveScene}
+                                onGenerateVideoPrompt={handleGenerateVideoPrompt}
+                                onEditSceneVideoPrompt={handleEditSceneVideoPrompt}
+                                onRegenerateScenePrompt={handleRegenerateScenePrompt}
+                                onRegenerateAnimation={handleRegenerateAnimation}
+                                aspectRatio={aspectRatio}
+                            />
+                        ) : (
+                            <div className="h-full flex flex-col items-center justify-center text-neutral-500 opacity-60">
+                                <StoryboardPlaceholderIcon className="h-24 w-24 mb-4" />
+                                <p className="text-xl font-medium">{t('storyboarding_scenes_placeholder')}</p>
+                            </div>
+                        )}
+                        
+                        {/* Hidden Inputs */}
+                        <input type="file" ref={importInputRef} className="hidden" accept=".json" onChange={handleImport} />
+                        <input type="file" ref={customImageUploadRef} className="hidden" accept="image/*" onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file && uploadingImageFor) {
+                                handleImageFile(file, uploadingImageFor.index, uploadingImageFor.frameType);
+                                setUploadingImageFor(null);
+                            }
+                            e.target.value = '';
+                        }} />
+                    </main>
+                </motion.div>
+            </motion.div>
+
+            {/* Global Modals */}
             <GalleryPicker
                 isOpen={isGalleryPickerOpen}
                 onClose={() => { setIsGalleryPickerOpen(false); setPickingCustomImageFor(null); }}
@@ -1213,12 +799,60 @@ export const StoryboardingModal: React.FC<StoryboardingModalProps> = ({ isOpen, 
                 images={imageGallery}
             />
             <Lightbox
-                images={imageGallery}
+                images={lightboxImages}
                 selectedIndex={lightboxIndex}
                 onClose={closeLightbox}
                 onNavigate={navigateLightbox}
             />
-        </>,
-        document.body
-    );
+        </>
+    , document.body);
+
+    // Helpers for updating deep scene state
+    function handleEditSceneDescription(index: number, frameType: 'start' | 'end', newDescription: string) {
+        const updatedScenes = [...scenes];
+        if (frameType === 'start') {
+            updatedScenes[index].startFrame.description = newDescription;
+        } else {
+            updatedScenes[index].endFrame.description = newDescription;
+        }
+        updateScenesAndHistory(updatedScenes);
+    }
+
+    function handleEditSceneAnimation(index: number, animationDescription: string) {
+        const updatedScenes = [...scenes];
+        updatedScenes[index].animationDescription = animationDescription;
+        updateScenesAndHistory(updatedScenes);
+    }
+
+    function handleImageSourceChange(index: number, frameType: 'start' | 'end', newSource: string) {
+        const updatedScenes = [...scenes];
+        if (frameType === 'start') {
+            updatedScenes[index].startFrame = { ...updatedScenes[index].startFrame, imageSource: newSource, imageUrl: undefined, status: 'idle' };
+        } else {
+            updatedScenes[index].endFrame = { ...updatedScenes[index].endFrame, imageSource: newSource, imageUrl: undefined, status: 'idle' };
+        }
+        updateScenesAndHistory(updatedScenes);
+    }
+
+    function handleClearImage(index: number, frameType: 'start' | 'end') {
+        const updatedScenes = [...scenes];
+        if (frameType === 'start') {
+            updatedScenes[index].startFrame = { ...updatedScenes[index].startFrame, imageUrl: undefined, status: 'idle' };
+        } else {
+            updatedScenes[index].endFrame = { ...updatedScenes[index].endFrame, imageUrl: undefined, status: 'idle' };
+        }
+        updateScenesAndHistory(updatedScenes);
+    }
+
+    function handleEditSceneVideoPrompt(index: number, videoPrompt: string) {
+        const updatedScenes = [...scenes];
+        updatedScenes[index] = { ...updatedScenes[index], videoPrompt };
+        updateScenesAndHistory(updatedScenes);
+    }
 };
+
+const StoryboardPlaceholderIcon = ({ className }: { className?: string }) => (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+    </svg>
+);

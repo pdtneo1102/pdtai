@@ -5,6 +5,7 @@
   "sunEffectCreator_uploaderCaption": "Upload Fashion Photo",
   "sunEffectCreator_uploaderDescription": "Click to upload a portrait or fashion photo to add sun effects",
   "sunEffectCreator_optionsTitle": "Sun Effect Options",
+  "sunEffectCreator_quickStylesTitle": "Artistic Quick Styles",
   "sunEffectCreator_effectLabel": "Effect Type",
   "sunEffectCreator_intensityLabel": "Intensity",
   "sunEffectCreator_positionLabel": "Sun Position",
@@ -13,6 +14,9 @@
   "sunEffectCreator_resultCaption": "Sunlit Result",
   "sunEffectCreator_regenDescription": "Add requests to adjust the lighting",
   "sunEffectCreator_regenPlaceholder": "e.g., warmer sun, reduce glare...",
+  "sunEffectCreator_style1": "Nắng Light",
+  "sunEffectCreator_style2": "Nắng Xuyên Lá",
+  "sunEffectCreator_style3": "Nắng Ngược",
   "sunEffectCreator_effectOptions": [
     "Golden Hour",
     "Sun Rays / God Rays",

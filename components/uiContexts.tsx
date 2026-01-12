@@ -261,7 +261,8 @@ export const AppControlProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 'mixStyle',
                 'photoRestoration',
                 'swapStyle',
-                'superSharp'
+                'superSharp',
+                'sunEffectCreator'
             ];
             try {
                 const fetchPromises = modules.map(module =>

@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -24,32 +25,8 @@ interface HomeProps {
 const Home: React.FC<HomeProps> = ({ onSelectApp, title, subtitle, apps }) => {
   const { t, importSettingsAndNavigate, openLayerComposer, addImagesToGallery, openStoryboardingModal, isLicenseValid, checkLicenseAccess } = useAppControls();
   const { openEmptyImageEditor } = useImageEditor();
-  const [currentPage, setCurrentPage] = useState(1);
-  const [showAll, setShowAll] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const APPS_PER_PAGE = 8;
-  const totalPages = Math.ceil(apps.length / APPS_PER_PAGE);
-
-  const displayedApps = showAll 
-    ? apps 
-    : apps.slice((currentPage - 1) * APPS_PER_PAGE, currentPage * APPS_PER_PAGE);
-
-  const handleNextPage = () => {
-    setCurrentPage(prev => Math.min(prev + 1, totalPages));
-  };
-
-  const handlePrevPage = () => {
-    setCurrentPage(prev => Math.max(prev - 1, 1));
-  };
-
-  const handleToggleShowAll = () => {
-    setShowAll(prev => !prev);
-    if (showAll) { // If it's currently showing all, we are collapsing it
-      setCurrentPage(1);
-    }
-  };
 
   const handleOpenEditor = useCallback(() => {
       if(!checkLicenseAccess()) return;
@@ -60,7 +37,7 @@ const Home: React.FC<HomeProps> = ({ onSelectApp, title, subtitle, apps }) => {
 
 
   // Use flexbox to center app cards in each row.
-  const appListContainerClasses = 'flex flex-wrap items-stretch justify-center w-full max-w-screen-2xl gap-6';
+  const appListContainerClasses = 'flex flex-wrap items-stretch justify-center w-full max-w-screen-2xl gap-6 pb-12';
 
   const renderAppTitle = (title: string) => {
     // Replace newline characters with a space for single-line display on home cards
@@ -188,7 +165,7 @@ const Home: React.FC<HomeProps> = ({ onSelectApp, title, subtitle, apps }) => {
 
 
       <div className={appListContainerClasses}>
-        {displayedApps.map((app, index) => {
+        {apps.map((app, index) => {
           return (
             <motion.div
               key={app.id}
@@ -196,7 +173,7 @@ const Home: React.FC<HomeProps> = ({ onSelectApp, title, subtitle, apps }) => {
               onClick={() => onSelectApp(app.id)}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 + 0.2 }}
+              transition={{ delay: index * 0.05 + 0.1 }}
               role="button"
               tabIndex={0}
               aria-label={`Mở tính năng ${app.title.replace('\n', ' ')}`}
@@ -228,31 +205,6 @@ const Home: React.FC<HomeProps> = ({ onSelectApp, title, subtitle, apps }) => {
         })}
       </div>
 
-      {apps.length > APPS_PER_PAGE && (
-        <div className="mt-8 w-full flex justify-center">
-          <motion.div 
-            className="pagination-nav"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-          >
-            {!showAll && totalPages > 1 && (
-              <>
-                <button onClick={handlePrevPage} disabled={currentPage === 1} aria-label="Trang trước">
-                  {t('home_prevPage')}
-                </button>
-                <span aria-live="polite">{t('home_page')} {currentPage} / {totalPages}</span>
-                <button onClick={handleNextPage} disabled={currentPage === totalPages} aria-label="Trang sau">
-                  {t('home_nextPage')}
-                </button>
-              </>
-            )}
-            <button onClick={handleToggleShowAll}>
-              {showAll ? t('home_collapse') : t('home_showAll')}
-            </button>
-          </motion.div>
-        </div>
-      )}
       <AnimatePresence>
           {isDraggingOver && (
               <motion.div
